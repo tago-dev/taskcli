@@ -2,11 +2,18 @@
 
 import { useState } from "react";
 import { generateId, playAudioFeedback } from "../lib/utils";
-import { CommandHistoryItem, Note, PomodoroMode, Task, TaskPriority, ThemeName } from "../types";
+import { CommandHistoryItem, Note, PomodoroMode, Task, TaskPriority, Team, TeamMember, TeamRole, ThemeName } from "../types";
 
 interface UseCliProps {
   tasks: Task[];
   notes: Note[];
+  teams?: Team[];
+  activeTeam?: Team | null;
+  isLoggedIn?: boolean;
+  createTeam?: (name: string, description: string) => Team;
+  addTeamMember?: (teamId: string, name: string, email: string, role: TeamRole) => TeamMember | null;
+  removeTeamMember?: (teamId: string, memberId: string) => boolean;
+  switchTeam?: (teamId: string) => void;
   addTask: (title: string, priority?: TaskPriority, tags?: string[], estimatedPomodoros?: number) => Task;
   toggleTask: (id: string) => Task | null;
   removeTask: (id: string) => boolean;
@@ -33,6 +40,13 @@ interface UseCliProps {
 export function useCli({
   tasks,
   notes,
+  teams = [],
+  activeTeam,
+  isLoggedIn = false,
+  createTeam,
+  addTeamMember,
+  removeTeamMember,
+  switchTeam,
   addTask,
   toggleTask,
   removeTask,
@@ -130,6 +144,7 @@ export function useCli({
           "  note <título> | <conteúdo>                 - Cria uma anotação",
           "  notes                                      - Lista anotações salvas",
           "  rmnote <id|número>                         - Remove uma anotação",
+          "  team [list|create|switch|info|member]      - Gerencia equipes e membros",
           "  pomodoro [start|pause|reset|25|50|5|15]    - Controla o timer Pomodoro",
           "  theme [dark|light|matrix|dracula|cyberpunk|nord] - Altera o tema",
           "  sync                                       - Sincroniza com Supabase",
@@ -396,6 +411,125 @@ export function useCli({
           addHistoryEntry(input, [`Tema alternado para: ${next.toUpperCase()}`], 'success');
         } else {
           addHistoryEntry(input, [`Tema inválido. Escolha: ${validThemes.join(', ')}`], 'error');
+        }
+        break;
+      }
+
+      case 'team': {
+        const sub = args[0]?.toLowerCase();
+        if (!sub || sub === 'list') {
+          if (teams.length === 0) {
+            addHistoryEntry(input, ["Nenhuma equipe cadastrada. Crie uma com `team create <nome>`."], 'info');
+          } else {
+            const lines = ["EQUIPES CADASTRADAS:"];
+            teams.forEach(t => {
+              const activeMark = activeTeam?.id === t.id ? " (Ativa)" : "";
+              lines.push(`  • [${t.code}] ${t.name}${activeMark} — ${t.members.length} membros`);
+            });
+            addHistoryEntry(input, lines, 'info');
+          }
+        } else if (sub === 'create') {
+          if (!isLoggedIn) {
+            addHistoryEntry(input, [
+              "Erro: Você precisa estar autenticado para criar uma equipe.",
+              "Faça login usando o botão 'Entrar' no canto superior direito.",
+            ], 'error');
+          } else {
+            const name = args[1];
+            if (!name) {
+              addHistoryEntry(input, ["Uso: team create <nome> [descrição]"], 'error');
+            } else if (createTeam) {
+              const desc = args.slice(2).join(' ');
+              const created = createTeam(name, desc);
+              addHistoryEntry(input, [
+                `Equipe "${created.name}" criada com sucesso!`,
+                `Código de Convite: ${created.code}`,
+                `ID: ${created.id}`,
+              ], 'success');
+            }
+          }
+        } else if (sub === 'switch') {
+          const query = args[1]?.toLowerCase();
+          if (!query) {
+            addHistoryEntry(input, ["Uso: team switch <id|código|nome>"], 'error');
+          } else {
+            const target = teams.find(
+              t => t.id.toLowerCase() === query ||
+                   t.code.toLowerCase() === query ||
+                   t.name.toLowerCase().includes(query)
+            );
+            if (target && switchTeam) {
+              switchTeam(target.id);
+              addHistoryEntry(input, [`Equipe ativa alterada para: "${target.name}"`], 'success');
+            } else {
+              addHistoryEntry(input, [`Equipe "${args[1]}" não encontrada.`], 'error');
+            }
+          }
+        } else if (sub === 'info') {
+          if (!activeTeam) {
+            addHistoryEntry(input, ["Nenhuma equipe ativa selecionada."], 'warn');
+          } else {
+            const lines = [
+              `EQUIPE: ${activeTeam.name}`,
+              `Código: ${activeTeam.code}`,
+              `Descrição: ${activeTeam.description || 'Sem descrição'}`,
+              `Membros (${activeTeam.members.length}):`,
+            ];
+            activeTeam.members.forEach(m => {
+              lines.push(`  - ${m.name} (${m.email}) [${m.role.toUpperCase()}]`);
+            });
+            addHistoryEntry(input, lines, 'info');
+          }
+        } else if (sub === 'member') {
+          const action = args[1]?.toLowerCase();
+          if (action === 'add') {
+            if (!isLoggedIn) {
+              addHistoryEntry(input, [
+                "Erro: Você precisa estar autenticado para adicionar membros a uma equipe.",
+                "Faça login usando o botão 'Entrar' no canto superior direito.",
+              ], 'error');
+            } else {
+              const memberName = args[2];
+              const memberEmail = args[3];
+              const role = (args[4]?.toLowerCase() || 'member') as TeamRole;
+              if (!memberName || !memberEmail || !activeTeam || !addTeamMember) {
+                addHistoryEntry(input, ["Uso: team member add <nome> <email> [role: member|admin|owner]"], 'error');
+              } else {
+                const added = addTeamMember(activeTeam.id, memberName, memberEmail, role);
+                if (added) {
+                  addHistoryEntry(input, [`Membro "${added.name}" adicionado à equipe com sucesso!`], 'success');
+                } else {
+                  addHistoryEntry(input, ["Não foi possível adicionar o membro (e-mail já cadastrado ou equipe inexistente)."], 'error');
+                }
+              }
+            }
+          } else if (action === 'rm' || action === 'remove') {
+            const target = args[2]?.toLowerCase();
+            if (!target || !activeTeam || !removeTeamMember) {
+              addHistoryEntry(input, ["Uso: team member rm <email|id>"], 'error');
+            } else {
+              const member = activeTeam.members.find(
+                m => m.id.toLowerCase() === target || m.email.toLowerCase() === target
+              );
+              if (member && removeTeamMember(activeTeam.id, member.id)) {
+                addHistoryEntry(input, [`Membro "${member.name}" removido da equipe.`], 'success');
+              } else {
+                addHistoryEntry(input, ["Membro não encontrado ou não pode ser removido."], 'error');
+              }
+            }
+          } else {
+            addHistoryEntry(input, ["Uso: team member add <nome> <email> [role] OU team member rm <email|id>"], 'info');
+          }
+        } else {
+          addHistoryEntry(input, [
+            "Opções de team:",
+            "  team list                    - Lista todas as equipes",
+            "  team create <nome> [desc]   - Cria nova equipe",
+            "  team switch <nome|código>    - Alterna a equipe ativa",
+            "  team info                    - Detalhes da equipe ativa",
+            "  team member add <nome> <email> [role] - Adiciona membro",
+            "  team member rm <email|id>    - Remove membro",
+          ], 'info');
         }
         break;
       }

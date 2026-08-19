@@ -43,7 +43,7 @@ export interface PomodoroState {
 
 export type ThemeName = 'dark' | 'light' | 'matrix' | 'dracula' | 'cyberpunk' | 'nord';
 
-export type ViewTab = 'all' | 'tasks' | 'notes' | 'pomodoro' | 'terminal';
+export type ViewTab = 'all' | 'tasks' | 'notes' | 'pomodoro' | 'terminal' | 'team';
 
 export interface CommandHistoryItem {
   id: string;
@@ -51,4 +51,27 @@ export interface CommandHistoryItem {
   output: string[];
   type: 'success' | 'error' | 'info' | 'warn';
   timestamp: number;
+}
+
+export type TeamRole = 'owner' | 'admin' | 'member';
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamRole;
+  avatarUrl?: string;
+  joinedAt: number;
+  status?: 'active' | 'focusing' | 'offline';
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  code: string;
+  members: TeamMember[];
+  createdAt: number;
+  updatedAt: number;
 }

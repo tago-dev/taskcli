@@ -7,11 +7,13 @@ import { Header } from "./components/Header";
 import { NotesSection } from "./components/NotesSection";
 import { PomodoroTimer } from "./components/PomodoroTimer";
 import { TaskList } from "./components/TaskList";
+import { TeamSection } from "./components/TeamSection";
 import { TerminalPrompt } from "./components/TerminalPrompt";
 import { useCli } from "./hooks/useCli";
 import { useNotes } from "./hooks/useNotes";
 import { usePomodoro } from "./hooks/usePomodoro";
 import { useTasks } from "./hooks/useTasks";
+import { useTeams } from "./hooks/useTeams";
 import { useTheme } from "./hooks/useTheme";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { bulkSyncToSupabase } from "./lib/supabaseDb";
@@ -24,6 +26,8 @@ export default function Home() {
 
   const { user, isLoaded: userLoaded } = useUser();
   const userId = user?.id || null;
+  const userName = user?.fullName || user?.firstName || null;
+  const userEmail = user?.primaryEmailAddress?.emailAddress || null;
 
   const { theme, changeTheme, cycleTheme, mounted: themeMounted } = useTheme();
 
@@ -67,12 +71,27 @@ export default function Home() {
     mounted: notesMounted,
   } = useNotes(userId);
 
+  const {
+    teams,
+    activeTeam,
+    setActiveTeamId,
+    createTeam,
+    updateTeam,
+    deleteTeam,
+    addMember,
+    removeMember,
+    updateMemberRole,
+    loadFromSupabase: loadTeamsFromSupabase,
+    mounted: teamsMounted,
+  } = useTeams(userId, userName, userEmail);
+
   useEffect(() => {
     if (userId && isSupabaseConfigured) {
       loadTasksFromSupabase(userId);
       loadNotesFromSupabase(userId);
+      loadTeamsFromSupabase(userId);
     }
-  }, [userId, loadTasksFromSupabase, loadNotesFromSupabase]);
+  }, [userId, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase]);
 
   const handleManualSync = async (): Promise<boolean> => {
     if (!userId || !isSupabaseConfigured) return false;
@@ -93,6 +112,13 @@ export default function Home() {
   } = useCli({
     tasks,
     notes,
+    teams,
+    activeTeam,
+    isLoggedIn: Boolean(userId),
+    createTeam,
+    addTeamMember: addMember,
+    removeTeamMember: removeMember,
+    switchTeam: setActiveTeamId,
     addTask,
     toggleTask,
     removeTask,
@@ -118,7 +144,7 @@ export default function Home() {
 
   const activeTask = tasks.find(t => t.id === pomodoro.activeTaskId) || null;
 
-  const isLoaded = themeMounted && tasksMounted && notesMounted && pomodoro.mounted && userLoaded;
+  const isLoaded = themeMounted && tasksMounted && notesMounted && teamsMounted && pomodoro.mounted && userLoaded;
 
   if (!isLoaded) {
     return (
@@ -336,6 +362,23 @@ export default function Home() {
                   ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {currentTab === "team" && (
+          <div className="max-w-5xl mx-auto space-y-8">
+            <TeamSection
+              teams={teams}
+              activeTeam={activeTeam}
+              isLoggedIn={Boolean(userId)}
+              onSelectTeam={setActiveTeamId}
+              onCreateTeam={createTeam}
+              onUpdateTeam={updateTeam}
+              onDeleteTeam={deleteTeam}
+              onAddMember={addMember}
+              onRemoveMember={removeMember}
+              onUpdateMemberRole={updateMemberRole}
+            />
           </div>
         )}
 

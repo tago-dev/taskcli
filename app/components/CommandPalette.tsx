@@ -60,6 +60,8 @@ export function CommandPalette({
     { cmd: "rm 1", desc: "Remove a tarefa indicada" },
     { cmd: "list active", desc: "Lista apenas tarefas não concluídas" },
     { cmd: "note Dicas | Usar Tailwind 4", desc: "Cria uma anotação com título e conteúdo" },
+    { cmd: "team create DevSquad", desc: "Cria uma nova equipe de trabalho" },
+    { cmd: "team list", desc: "Lista todas as equipes e membros" },
     { cmd: "pomodoro start", desc: "Inicia o temporizador Pomodoro" },
     { cmd: "pomodoro 50", desc: "Configura o ciclo para 50 minutos" },
     { cmd: "theme dracula", desc: "Muda o visual do app instantaneamente" },

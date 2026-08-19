@@ -18,6 +18,7 @@ import {
   Palette,
   Terminal as TerminalIcon,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { ThemeName, ViewTab } from "../types";
 
@@ -143,6 +144,17 @@ export function Header({
           >
             <Clock className="w-4 h-4" />
             <span>Pomodoro</span>
+          </button>
+          <button
+            onClick={() => setTab("team")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+              currentTab === "team"
+                ? "bg-[var(--accent)] text-[var(--accent-text)] font-semibold shadow-xs"
+                : "text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card)]"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Equipe</span>
           </button>
           <button
             onClick={() => setTab("terminal")}
