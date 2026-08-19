@@ -1,4 +1,4 @@
-import { Note, PomodoroSettings, PomodoroState, Task, ThemeName } from "../types";
+import { Note, PomodoroSettings, PomodoroState, Task, Team, ThemeName } from "../types";
 
 const STORAGE_KEYS = {
   TASKS: "taskcli_tasks",
@@ -6,6 +6,8 @@ const STORAGE_KEYS = {
   POMODORO_SETTINGS: "taskcli_pomodoro_settings",
   POMODORO_STATE: "taskcli_pomodoro_state",
   THEME: "taskcli_theme",
+  TEAMS: "taskcli_teams",
+  ACTIVE_TEAM_ID: "taskcli_active_team_id",
 } as const;
 
 export const DEFAULT_POMODORO_SETTINGS: PomodoroSettings = {
@@ -63,6 +65,47 @@ export function setStoredNotes(notes: Note[]): void {
   }
 }
 
+export function getStoredTeams(): Team[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.TEAMS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setStoredTeams(teams: Team[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+  } catch {
+    return;
+  }
+}
+
+export function getStoredActiveTeamId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_TEAM_ID);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredActiveTeamId(teamId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (teamId) {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_TEAM_ID, teamId);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_TEAM_ID);
+    }
+  } catch {
+    return;
+  }
+}
+
 export function getStoredPomodoroSettings(): PomodoroSettings {
   if (typeof window === "undefined") return DEFAULT_POMODORO_SETTINGS;
   try {
@@ -108,9 +151,10 @@ export function exportData(): string {
   if (typeof window === "undefined") return "{}";
   const tasks = getStoredTasks();
   const notes = getStoredNotes();
+  const teams = getStoredTeams();
   const settings = getStoredPomodoroSettings();
   const theme = getStoredTheme();
-  return JSON.stringify({ tasks, notes, settings, theme, exportedAt: Date.now() }, null, 2);
+  return JSON.stringify({ tasks, notes, teams, settings, theme, exportedAt: Date.now() }, null, 2);
 }
 
 export function importData(jsonString: string): boolean {
@@ -119,6 +163,7 @@ export function importData(jsonString: string): boolean {
     const parsed = JSON.parse(jsonString);
     if (Array.isArray(parsed.tasks)) setStoredTasks(parsed.tasks);
     if (Array.isArray(parsed.notes)) setStoredNotes(parsed.notes);
+    if (Array.isArray(parsed.teams)) setStoredTeams(parsed.teams);
     if (parsed.settings) setStoredPomodoroSettings(parsed.settings);
     if (parsed.theme) setStoredTheme(parsed.theme);
     return true;
