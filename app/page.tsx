@@ -1,69 +1,352 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from "react";
+import { CommandPalette } from "./components/CommandPalette";
+import { Header } from "./components/Header";
+import { NotesSection } from "./components/NotesSection";
+import { PomodoroTimer } from "./components/PomodoroTimer";
+import { TaskList } from "./components/TaskList";
+import { TerminalPrompt } from "./components/TerminalPrompt";
+import { useCli } from "./hooks/useCli";
+import { useNotes } from "./hooks/useNotes";
+import { usePomodoro } from "./hooks/usePomodoro";
+import { useTasks } from "./hooks/useTasks";
+import { useTheme } from "./hooks/useTheme";
+import { ViewTab } from "./types";
 
 export default function Home() {
+  const [currentTab, setCurrentTab] = useState<ViewTab>("all");
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
+
+  const { theme, changeTheme, cycleTheme, mounted: themeMounted } = useTheme();
+
+  const {
+    tasks,
+    filteredTasks,
+    filter,
+    setFilter,
+    searchQuery: taskSearch,
+    setSearchQuery: setTaskSearch,
+    priorityFilter,
+    setPriorityFilter,
+    selectedTag: taskSelectedTag,
+    setSelectedTag: setTaskSelectedTag,
+    allTags: taskTags,
+    stats,
+    addTask,
+    toggleTask,
+    removeTask,
+    updateTask,
+    incrementPomodoro,
+    clearCompleted,
+    clearAll: clearAllTasks,
+    mounted: tasksMounted,
+  } = useTasks();
+
+  const {
+    notes,
+    filteredNotes,
+    searchQuery: noteSearch,
+    setSearchQuery: setNoteSearch,
+    selectedTag: noteSelectedTag,
+    setSelectedTag: setNoteSelectedTag,
+    allTags: noteTags,
+    addNote,
+    updateNote,
+    removeNote,
+    togglePinNote,
+    mounted: notesMounted,
+  } = useNotes();
+
+  const pomodoro = usePomodoro(taskId => {
+    if (taskId) {
+      incrementPomodoro(taskId);
+    }
+  });
+
+  const {
+    history,
+    commandHistoryList,
+    executeCommand,
+    clearTerminal,
+  } = useCli({
+    tasks,
+    notes,
+    addTask,
+    toggleTask,
+    removeTask,
+    clearCompleted,
+    clearAllTasks,
+    addNote,
+    removeNote,
+    pomodoro: {
+      start: pomodoro.start,
+      pause: pomodoro.pause,
+      reset: pomodoro.reset,
+      switchMode: pomodoro.switchMode,
+      setCustomMinutes: pomodoro.setCustomMinutes,
+      isRunning: pomodoro.isRunning,
+      mode: pomodoro.mode,
+      timeLeft: pomodoro.timeLeft,
+      sessionsCompleted: pomodoro.sessionsCompleted,
+    },
+    changeTheme,
+    cycleTheme,
+  });
+
+  const activeTask = tasks.find(t => t.id === pomodoro.activeTaskId) || null;
+
+  const isLoaded = themeMounted && tasksMounted && notesMounted && pomodoro.mounted;
+
+  if (!isLoaded) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen bg-[var(--bg-main)] text-[var(--accent)] font-mono text-base">
+        <div className="flex items-center gap-3">
+          <span className="w-3 h-3 rounded-full bg-[var(--accent)] animate-ping" />
+          <span>taskcli: inicializando ambiente...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+    <div className="min-h-screen flex flex-col bg-[var(--bg-main)] text-[var(--text-main)] font-sans antialiased">
+      <Header
+        currentTab={currentTab}
+        setTab={setCurrentTab}
+        theme={theme}
+        onCycleTheme={cycleTheme}
+        completedTasks={stats.completed}
+        totalTasks={stats.total}
+        pomodoroSessions={pomodoro.sessionsCompleted}
+        onOpenHelp={() => setIsCommandPaletteOpen(true)}
+      />
+
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 space-y-8">
+        {currentTab === "all" && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-5 space-y-8">
+              <PomodoroTimer
+                mode={pomodoro.mode}
+                timeLeft={pomodoro.timeLeft}
+                totalSeconds={pomodoro.totalSeconds}
+                isRunning={pomodoro.isRunning}
+                progress={pomodoro.progress}
+                sessionsCompleted={pomodoro.sessionsCompleted}
+                activeTask={activeTask}
+                settings={pomodoro.settings}
+                onToggle={pomodoro.toggle}
+                onReset={pomodoro.reset}
+                onSwitchMode={pomodoro.switchMode}
+                onSetCustomMinutes={pomodoro.setCustomMinutes}
+                onToggleSound={() =>
+                  pomodoro.updateSettings({ soundEnabled: !pomodoro.settings.soundEnabled })
+                }
+                onClearActiveTask={() => pomodoro.setActiveTaskId(null)}
+              />
+
+              <TerminalPrompt
+                history={history}
+                commandHistoryList={commandHistoryList}
+                onExecute={executeCommand}
+                onClear={clearTerminal}
+                isExpanded={isTerminalExpanded}
+                onToggleExpand={() => setIsTerminalExpanded(!isTerminalExpanded)}
+              />
+            </div>
+
+            <div className="lg:col-span-7 space-y-8">
+              <TaskList
+                tasks={tasks}
+                filteredTasks={filteredTasks}
+                filter={filter}
+                setFilter={setFilter}
+                searchQuery={taskSearch}
+                setSearchQuery={setTaskSearch}
+                priorityFilter={priorityFilter}
+                setPriorityFilter={setPriorityFilter}
+                selectedTag={taskSelectedTag}
+                setSelectedTag={setTaskSelectedTag}
+                allTags={taskTags}
+                activePomodoroTaskId={pomodoro.activeTaskId}
+                onAddTask={(title, priority, tags, pomos) =>
+                  addTask(title, priority, tags, pomos)
+                }
+                onToggleTask={toggleTask}
+                onRemoveTask={removeTask}
+                onUpdateTask={updateTask}
+                onSelectForPomodoro={id =>
+                  pomodoro.setActiveTaskId(pomodoro.activeTaskId === id ? null : id)
+                }
+                onClearCompleted={clearCompleted}
+              />
+
+              <NotesSection
+                notes={notes}
+                filteredNotes={filteredNotes}
+                searchQuery={noteSearch}
+                setSearchQuery={setNoteSearch}
+                selectedTag={noteSelectedTag}
+                setSelectedTag={setNoteSelectedTag}
+                allTags={noteTags}
+                onAddNote={addNote}
+                onUpdateNote={updateNote}
+                onRemoveNote={removeNote}
+                onTogglePin={togglePinNote}
+              />
+            </div>
+          </div>
+        )}
+
+        {currentTab === "tasks" && (
+          <div className="max-w-4xl mx-auto space-y-8">
+            {activeTask && (
+              <PomodoroTimer
+                mode={pomodoro.mode}
+                timeLeft={pomodoro.timeLeft}
+                totalSeconds={pomodoro.totalSeconds}
+                isRunning={pomodoro.isRunning}
+                progress={pomodoro.progress}
+                sessionsCompleted={pomodoro.sessionsCompleted}
+                activeTask={activeTask}
+                settings={pomodoro.settings}
+                onToggle={pomodoro.toggle}
+                onReset={pomodoro.reset}
+                onSwitchMode={pomodoro.switchMode}
+                onSetCustomMinutes={pomodoro.setCustomMinutes}
+                onToggleSound={() =>
+                  pomodoro.updateSettings({ soundEnabled: !pomodoro.settings.soundEnabled })
+                }
+                onClearActiveTask={() => pomodoro.setActiveTaskId(null)}
+                isCompact
+              />
+            )}
+
+            <TaskList
+              tasks={tasks}
+              filteredTasks={filteredTasks}
+              filter={filter}
+              setFilter={setFilter}
+              searchQuery={taskSearch}
+              setSearchQuery={setTaskSearch}
+              priorityFilter={priorityFilter}
+              setPriorityFilter={setPriorityFilter}
+              selectedTag={taskSelectedTag}
+              setSelectedTag={setTaskSelectedTag}
+              allTags={taskTags}
+              activePomodoroTaskId={pomodoro.activeTaskId}
+              onAddTask={(title, priority, tags, pomos) =>
+                addTask(title, priority, tags, pomos)
+              }
+              onToggleTask={toggleTask}
+              onRemoveTask={removeTask}
+              onUpdateTask={updateTask}
+              onSelectForPomodoro={id =>
+                pomodoro.setActiveTaskId(pomodoro.activeTaskId === id ? null : id)
+              }
+              onClearCompleted={clearCompleted}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          </div>
+        )}
+
+        {currentTab === "notes" && (
+          <div className="max-w-4xl mx-auto space-y-8">
+            <NotesSection
+              notes={notes}
+              filteredNotes={filteredNotes}
+              searchQuery={noteSearch}
+              setSearchQuery={setNoteSearch}
+              selectedTag={noteSelectedTag}
+              setSelectedTag={setNoteSelectedTag}
+              allTags={noteTags}
+              onAddNote={addNote}
+              onUpdateNote={updateNote}
+              onRemoveNote={removeNote}
+              onTogglePin={togglePinNote}
+            />
+          </div>
+        )}
+
+        {currentTab === "pomodoro" && (
+          <div className="max-w-3xl mx-auto space-y-8">
+            <PomodoroTimer
+              mode={pomodoro.mode}
+              timeLeft={pomodoro.timeLeft}
+              totalSeconds={pomodoro.totalSeconds}
+              isRunning={pomodoro.isRunning}
+              progress={pomodoro.progress}
+              sessionsCompleted={pomodoro.sessionsCompleted}
+              activeTask={activeTask}
+              settings={pomodoro.settings}
+              onToggle={pomodoro.toggle}
+              onReset={pomodoro.reset}
+              onSwitchMode={pomodoro.switchMode}
+              onSetCustomMinutes={pomodoro.setCustomMinutes}
+              onToggleSound={() =>
+                pomodoro.updateSettings({ soundEnabled: !pomodoro.settings.soundEnabled })
+              }
+              onClearActiveTask={() => pomodoro.setActiveTaskId(null)}
+            />
+
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm">
+              <h3 className="text-sm font-mono font-bold text-[var(--text-dim)] uppercase mb-4 tracking-wide">
+                Selecione uma tarefa para focar:
+              </h3>
+              <div className="space-y-3 max-h-72 overflow-y-auto terminal-scroll">
+                {tasks
+                  .filter(t => !t.completed)
+                  .map(task => (
+                    <button
+                      key={task.id}
+                      onClick={() => pomodoro.setActiveTaskId(task.id)}
+                      className={`w-full flex items-center justify-between p-4 rounded-xl border text-left text-sm transition-all shadow-xs ${
+                        task.id === pomodoro.activeTaskId
+                          ? "bg-[var(--bg-card)] border-[var(--accent)] text-[var(--text-main)] font-semibold ring-1 ring-[var(--accent)]/30"
+                          : "bg-[var(--bg-main)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card)]"
+                      }`}
+                    >
+                      <span className="truncate">{task.title}</span>
+                      <span className="text-xs font-mono text-[var(--accent)] font-bold shrink-0 ml-3">
+                        🍅 {task.completedPomodoros}/{task.estimatedPomodoros}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentTab === "terminal" && (
+          <div className="max-w-5xl mx-auto space-y-8">
+            <TerminalPrompt
+              history={history}
+              commandHistoryList={commandHistoryList}
+              onExecute={executeCommand}
+              onClear={clearTerminal}
+              isExpanded
+            />
+          </div>
+        )}
       </main>
+
+      <footer className="w-full border-t border-[var(--border-color)] bg-[var(--bg-surface)] py-4 px-6 text-center text-xs font-mono text-[var(--text-dim)] transition-colors mt-8">
+        <div className="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          <span>TaskCli • Minimalist Productivity Terminal</span>
+          <div className="flex items-center gap-4">
+            <span>Pressione <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border-color)] text-xs">Ctrl+K</kbd> para comandos</span>
+            <span>Tema: <strong className="text-[var(--text-main)] uppercase">{theme}</strong></span>
+          </div>
+        </div>
+      </footer>
+
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        currentTheme={theme}
+        onSelectTheme={changeTheme}
+        onRunCommand={executeCommand}
+      />
     </div>
   );
 }

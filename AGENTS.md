@@ -1,3 +1,57 @@
+# TASKCLI 
+
+Um web app de notas onde você pode adicionar, remover, listar e concluir tarefas.
+com pomodoro para manter o foco.
+
+sistema de autenticação com google e github.
+
+
+# REGRAS GERAIS:
+
+- Use Next.js
+- Use TypeScript
+- Use TailwindCSS
+- Use Shadcn UI
+- Use db supabase
+- O layout deve ser dividido em duas partes:
+  - Cabeçalho com o título "TaskCli"
+  - Corpo com a área de digitação e a lista de tarefas
+- A aplicação deve ter um tema escuro.
+- mobile first
+- O layout deve ser responsivo.
+
+# REGRAS DE CODIFICAÇÃO:
+- O código deve ser LIMPO.
+- SEM COMENTÁRIOS
+- SEM NOMES CONFUSOS
+- SEM ERROS
+- SEM VULNERABILIDADES
+
+# CARACTERÍSTICAS:
+- Interface minimalista
+- Simulação de terminal
+- Adicionar tarefas
+- Remover tarefas
+- Listar tarefas
+- Concluir tarefas
+
+# Tech Stack
+
+- Next.js
+- TypeScript
+- TailwindCSS
+- Shadcn UI
+- db supabase
+- Clerk - Autenticação
+
+# REGRAS DE UX/UI:
+- O layout deve ser minimalista
+- O layout deve ser responsivo
+- O layout deve ter um tema escuro
+- O layout deve ter um tema claro
+- O layout deve ter um tema escuro e claro
+- O layout deve ter um tema escuro, claro e um tema personalizado
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

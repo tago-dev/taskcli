@@ -1,0 +1,54 @@
+export type TaskPriority = 'low' | 'medium' | 'high';
+
+export interface Task {
+  id: string;
+  title: string;
+  completed: boolean;
+  priority: TaskPriority;
+  tags: string[];
+  estimatedPomodoros: number;
+  completedPomodoros: number;
+  createdAt: number;
+  completedAt?: number;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type PomodoroMode = 'focus' | 'shortBreak' | 'longBreak';
+
+export interface PomodoroSettings {
+  focusDuration: number;
+  shortBreakDuration: number;
+  longBreakDuration: number;
+  soundEnabled: boolean;
+  autoStartBreaks: boolean;
+}
+
+export interface PomodoroState {
+  mode: PomodoroMode;
+  timeLeft: number;
+  isRunning: boolean;
+  totalSeconds: number;
+  activeTaskId: string | null;
+  sessionsCompleted: number;
+}
+
+export type ThemeName = 'dark' | 'light' | 'matrix' | 'dracula' | 'cyberpunk' | 'nord';
+
+export type ViewTab = 'all' | 'tasks' | 'notes' | 'pomodoro' | 'terminal';
+
+export interface CommandHistoryItem {
+  id: string;
+  command: string;
+  output: string[];
+  type: 'success' | 'error' | 'info' | 'warn';
+  timestamp: number;
+}
