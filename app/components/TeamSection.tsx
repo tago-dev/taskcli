@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Copy,
   Crown,
+  KeyRound,
   Lock,
   LogIn,
   Mail,
@@ -23,9 +24,9 @@ import {
   Users,
   X,
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { formatDate } from "../lib/utils";
-import { Team, TeamMember, TeamRole } from "../types";
+import { Team, TeamMember, TeamRole, UserProfile } from "../types";
 
 interface TeamSectionProps {
   teams: Team[];
@@ -35,9 +36,11 @@ interface TeamSectionProps {
   onCreateTeam: (name: string, description: string) => void;
   onUpdateTeam: (teamId: string, updates: Partial<Pick<Team, "name" | "description">>) => void;
   onDeleteTeam: (teamId: string) => void;
-  onAddMember: (teamId: string, name: string, email: string, role: TeamRole) => void;
+  onAddMember: (teamId: string, name: string, email: string, role: TeamRole, avatarUrl?: string) => void;
   onRemoveMember: (teamId: string, memberId: string) => void;
   onUpdateMemberRole: (teamId: string, memberId: string, role: TeamRole) => void;
+  onSearchProfiles?: (query: string) => Promise<UserProfile[]>;
+  onJoinTeamByCode?: (code: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export function TeamSection({
@@ -50,6 +53,8 @@ export function TeamSection({
   onAddMember,
   onRemoveMember,
   onUpdateMemberRole,
+  onSearchProfiles,
+  onJoinTeamByCode,
 }: TeamSectionProps) {
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
@@ -59,9 +64,46 @@ export function TeamSection({
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState<TeamRole>("member");
+  const [newMemberAvatar, setNewMemberAvatar] = useState<string | undefined>(undefined);
+
+  const [searchUserQuery, setSearchUserQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+
+  const [isJoiningByCode, setIsJoiningByCode] = useState(false);
+  const [teamCodeInput, setTeamCodeInput] = useState("");
+  const [joinFeedback, setJoinFeedback] = useState<{ text: string; isError: boolean } | null>(null);
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [searchMember, setSearchMember] = useState("");
+
+  useEffect(() => {
+    if (!isInvitingMember || !onSearchProfiles) return;
+
+    let isCurrent = true;
+
+    const timer = setTimeout(() => {
+      setIsSearchingUsers(true);
+      onSearchProfiles(searchUserQuery)
+        .then(results => {
+          if (isCurrent) {
+            setSearchResults(results);
+            setIsSearchingUsers(false);
+          }
+        })
+        .catch(() => {
+          if (isCurrent) {
+            setSearchResults([]);
+            setIsSearchingUsers(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [isInvitingMember, searchUserQuery, onSearchProfiles]);
 
   const handleCreateTeam = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,11 +119,37 @@ export function TeamSection({
     e.preventDefault();
     if (!activeTeam || !newMemberName.trim() || !newMemberEmail.trim() || !isLoggedIn) return;
 
-    onAddMember(activeTeam.id, newMemberName.trim(), newMemberEmail.trim(), newMemberRole);
+    onAddMember(activeTeam.id, newMemberName.trim(), newMemberEmail.trim(), newMemberRole, newMemberAvatar);
     setNewMemberName("");
     setNewMemberEmail("");
     setNewMemberRole("member");
+    setNewMemberAvatar(undefined);
+    setSearchUserQuery("");
     setIsInvitingMember(false);
+  };
+
+  const handleSelectProfile = (profile: UserProfile) => {
+    setNewMemberName(profile.name);
+    setNewMemberEmail(profile.email);
+    setNewMemberAvatar(profile.avatarUrl);
+  };
+
+  const handleJoinByCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teamCodeInput.trim() || !onJoinTeamByCode) return;
+
+    setJoinFeedback(null);
+    const result = await onJoinTeamByCode(teamCodeInput.trim());
+    if (result.success) {
+      setJoinFeedback({ text: result.message, isError: false });
+      setTimeout(() => {
+        setIsJoiningByCode(false);
+        setTeamCodeInput("");
+        setJoinFeedback(null);
+      }, 1200);
+    } else {
+      setJoinFeedback({ text: result.message, isError: true });
+    }
   };
 
   const handleCopyCode = () => {
@@ -182,7 +250,7 @@ export function TeamSection({
     );
   }
 
-  if (teams.length === 0 && !isCreatingTeam) {
+  if (teams.length === 0 && !isCreatingTeam && !isJoiningByCode) {
     return (
       <div className="flex flex-col items-center justify-center gap-6 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-10 sm:p-16 text-center shadow-sm">
         <div className="w-16 h-16 rounded-2xl bg-[var(--accent-soft)] border border-[var(--accent)]/30 flex items-center justify-center text-[var(--accent)]">
@@ -193,16 +261,25 @@ export function TeamSection({
             Nenhuma Equipe Cadastrada
           </h2>
           <p className="text-sm text-[var(--text-muted)]">
-            Crie sua primeira equipe para colaborar em projetos, compartilhar tarefas e sincronizar ciclos de foco Pomodoro com seus colegas.
+            Crie sua primeira equipe ou entre em uma equipe existente através do código de convite.
           </p>
         </div>
-        <button
-          onClick={() => setIsCreatingTeam(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-text)] font-mono font-bold text-sm hover:opacity-90 transition-all shadow-md"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Criar Primeira Equipe</span>
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => setIsCreatingTeam(true)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-text)] font-mono font-bold text-sm hover:opacity-90 transition-all shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Criar Equipe</span>
+          </button>
+          <button
+            onClick={() => setIsJoiningByCode(true)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] text-[var(--text-main)] font-mono font-semibold text-sm transition-all shadow-xs"
+          >
+            <KeyRound className="w-4 h-4 text-[var(--accent)]" />
+            <span>Entrar com Código</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -259,16 +336,27 @@ export function TeamSection({
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {activeTeam && (
             <button
-              onClick={() => setIsInvitingMember(true)}
+              onClick={() => {
+                setIsInvitingMember(true);
+                setSearchUserQuery("");
+              }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] text-xs sm:text-sm font-mono font-semibold text-[var(--text-main)] transition-all shadow-xs"
             >
               <UserPlus className="w-4 h-4 text-[var(--accent)]" />
               <span>Convidar Membro</span>
             </button>
           )}
+
+          <button
+            onClick={() => setIsJoiningByCode(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] text-xs sm:text-sm font-mono font-semibold text-[var(--text-main)] transition-all shadow-xs"
+          >
+            <KeyRound className="w-4 h-4 text-[var(--accent)]" />
+            <span>Entrar com Código</span>
+          </button>
 
           <button
             onClick={() => setIsCreatingTeam(true)}
@@ -279,6 +367,75 @@ export function TeamSection({
           </button>
         </div>
       </div>
+
+      {isJoiningByCode && (
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded-2xl p-6 sm:p-8 shadow-xl animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-color)]">
+            <div className="flex items-center gap-2.5">
+              <KeyRound className="w-5 h-5 text-[var(--accent)]" />
+              <h3 className="text-base font-bold font-mono text-[var(--text-main)] uppercase">
+                Entrar em Equipe via Código
+              </h3>
+            </div>
+            <button
+              onClick={() => {
+                setIsJoiningByCode(false);
+                setJoinFeedback(null);
+              }}
+              className="p-1.5 rounded-lg text-[var(--text-dim)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card)] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleJoinByCode} className="space-y-4">
+            <div>
+              <label className="block text-xs font-mono uppercase text-[var(--text-dim)] mb-1.5 font-semibold">
+                Código de Convite da Equipe *
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: TASK-DEV-77..."
+                value={teamCodeInput}
+                onChange={e => setTeamCodeInput(e.target.value.toUpperCase())}
+                required
+                className="w-full bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm font-mono uppercase text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)]"
+              />
+            </div>
+
+            {joinFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs font-mono border ${
+                  joinFeedback.isError
+                    ? "bg-[var(--danger-soft)] text-[var(--danger)] border-[var(--danger)]/30"
+                    : "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/30"
+                }`}
+              >
+                {joinFeedback.text}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border-color)]">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsJoiningByCode(false);
+                  setJoinFeedback(null);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-text)] text-xs font-mono font-bold hover:opacity-90 transition-opacity shadow-xs"
+              >
+                Entrar na Equipe
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {isCreatingTeam && (
         <div className="bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded-2xl p-6 sm:p-8 shadow-xl animate-in fade-in duration-200">
@@ -345,12 +502,12 @@ export function TeamSection({
       )}
 
       {isInvitingMember && activeTeam && (
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded-2xl p-6 sm:p-8 shadow-xl animate-in fade-in duration-200">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-color)]">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded-2xl p-6 sm:p-8 shadow-xl animate-in fade-in duration-200 space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-[var(--border-color)]">
             <div className="flex items-center gap-2.5">
               <UserPlus className="w-5 h-5 text-[var(--accent)]" />
               <h3 className="text-base font-bold font-mono text-[var(--text-main)] uppercase">
-                Adicionar Membro à Equipe &quot;{activeTeam.name}&quot;
+                Convidar Membro para &quot;{activeTeam.name}&quot;
               </h3>
             </div>
             <button
@@ -359,6 +516,90 @@ export function TeamSection({
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+
+          <div className="space-y-3 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl p-4">
+            <label className="block text-xs font-mono uppercase text-[var(--text-dim)] font-semibold">
+              Pesquisar Usuário Registrado (Nome ou E-mail)
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-[var(--text-dim)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Comece a digitar o nome ou e-mail do usuário..."
+                value={searchUserQuery}
+                onChange={e => setSearchUserQuery(e.target.value)}
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-mono text-[var(--text-main)] placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--accent)]"
+              />
+            </div>
+
+            {isSearchingUsers ? (
+              <div className="py-3 text-center text-xs font-mono text-[var(--text-dim)] animate-pulse">
+                Pesquisando usuários registrados...
+              </div>
+            ) : searchResults.length > 0 ? (
+              <div className="max-h-48 overflow-y-auto divide-y divide-[var(--border-color)] border border-[var(--border-color)] rounded-xl bg-[var(--bg-surface)] mt-2">
+                {searchResults.map(user => {
+                  const isAlreadyMember = activeTeam.members.some(
+                    m => m.email.toLowerCase() === user.email.toLowerCase()
+                  );
+                  const isSelected = newMemberEmail.toLowerCase() === user.email.toLowerCase();
+
+                  return (
+                    <div
+                      key={user.id}
+                      onClick={() => !isAlreadyMember && handleSelectProfile(user)}
+                      className={`flex items-center justify-between p-3 transition-colors ${
+                        isAlreadyMember
+                          ? "opacity-50 cursor-not-allowed"
+                          : isSelected
+                          ? "bg-[var(--accent-soft)]/40 cursor-pointer"
+                          : "hover:bg-[var(--bg-card)] cursor-pointer"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-xs text-[var(--accent)]">
+                          {user.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="text-xs font-mono font-bold text-[var(--text-main)]">
+                            {user.name}
+                          </div>
+                          <div className="text-[11px] font-mono text-[var(--text-dim)]">
+                            {user.email}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        {isAlreadyMember ? (
+                          <span className="text-[10px] font-mono text-[var(--text-dim)] bg-[var(--bg-main)] px-2 py-0.5 rounded border border-[var(--border-color)]">
+                            Já na equipe
+                          </span>
+                        ) : isSelected ? (
+                          <span className="text-[10px] font-mono text-[var(--accent)] font-bold flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Selecionado
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-[11px] font-mono text-[var(--accent)] hover:underline"
+                          >
+                            Selecionar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              searchUserQuery.trim() && (
+                <div className="py-3 text-center text-xs font-mono text-[var(--text-dim)]">
+                  Nenhum usuário cadastrado encontrado com esse termo. Você pode preencher manualmente abaixo para convidar via e-mail.
+                </div>
+              )
+            )}
           </div>
 
           <form onSubmit={handleAddMember} className="space-y-4">
@@ -618,3 +859,4 @@ export function TeamSection({
     </div>
   );
 }
+

@@ -7,11 +7,13 @@ import {
   createTeamInSupabase,
   deleteTeamInSupabase,
   fetchTeamsFromSupabase,
+  joinTeamByCodeInSupabase,
   removeTeamMemberInSupabase,
+  searchProfilesInSupabase,
   updateTeamInSupabase,
 } from "../lib/supabaseDb";
 import { generateId, playAudioFeedback } from "../lib/utils";
-import { Team, TeamMember, TeamRole } from "../types";
+import { Team, TeamMember, TeamRole, UserProfile } from "../types";
 
 const defaultInitialTeams: Team[] = [
   {
@@ -112,8 +114,8 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     playAudioFeedback("click");
   }, []);
 
-  const loadFromSupabase = useCallback(async (uid: string) => {
-    const remoteTeams = await fetchTeamsFromSupabase(uid);
+  const loadFromSupabase = useCallback(async (uid: string, uemail?: string | null) => {
+    const remoteTeams = await fetchTeamsFromSupabase(uid, uemail);
     if (remoteTeams !== null && remoteTeams.length > 0) {
       saveTeams(remoteTeams);
       const activeExists = remoteTeams.some(t => t.id === activeTeamId);
@@ -123,6 +125,10 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
       }
     }
   }, [saveTeams, activeTeamId]);
+
+  const searchProfiles = useCallback(async (query: string): Promise<UserProfile[]> => {
+    return await searchProfilesInSupabase(query);
+  }, []);
 
   const createTeam = useCallback((
     name: string,
@@ -163,6 +169,46 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
 
     return newTeam;
   }, [teams, saveTeams, setActiveTeamId, userId, userName, userEmail]);
+
+  const joinTeamByCode = useCallback(async (
+    code: string
+  ): Promise<{ success: boolean; message: string; team?: Team }> => {
+    const cleanCode = code.trim().toUpperCase();
+    if (!cleanCode) {
+      return { success: false, message: "Código inválido." };
+    }
+
+    const localFound = teams.find(t => t.code.toUpperCase() === cleanCode);
+    if (localFound) {
+      setActiveTeamId(localFound.id);
+      playAudioFeedback("success");
+      return { success: true, message: `Equipe "${localFound.name}" ativada.`, team: localFound };
+    }
+
+    const myMember: TeamMember = {
+      id: generateId(),
+      name: userName || "Novo Membro",
+      email: userEmail || "membro@taskcli.io",
+      role: "member",
+      joinedAt: Date.now(),
+      status: "active",
+    };
+
+    const res = await joinTeamByCodeInSupabase(cleanCode, myMember);
+    if (res.team) {
+      const exists = teams.some(t => t.id === res.team?.id);
+      const updated = exists
+        ? teams.map(t => (t.id === res.team?.id ? res.team! : t))
+        : [res.team, ...teams];
+      saveTeams(updated);
+      setActiveTeamId(res.team.id);
+      playAudioFeedback("success");
+      return { success: true, message: `Você entrou na equipe "${res.team.name}".`, team: res.team };
+    }
+
+    playAudioFeedback("error");
+    return { success: false, message: res.error || "Equipe não encontrada." };
+  }, [teams, saveTeams, setActiveTeamId, userName, userEmail]);
 
   const updateTeam = useCallback((
     teamId: string,
@@ -219,7 +265,8 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     teamId: string,
     name: string,
     email: string,
-    role: TeamRole = "member"
+    role: TeamRole = "member",
+    avatarUrl?: string
   ): TeamMember | null => {
     const targetTeam = teams.find(t => t.id === teamId);
     if (!targetTeam) return null;
@@ -232,6 +279,7 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
       name: name.trim() || "Membro da Equipe",
       email: email.trim().toLowerCase(),
       role,
+      avatarUrl,
       joinedAt: Date.now(),
       status: "active",
     };
@@ -337,6 +385,8 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     searchQuery,
     setSearchQuery,
     createTeam,
+    joinTeamByCode,
+    searchProfiles,
     updateTeam,
     deleteTeam,
     addMember,
@@ -347,3 +397,4 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     mounted: true,
   };
 }
+

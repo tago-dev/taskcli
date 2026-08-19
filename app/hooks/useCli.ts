@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { generateId, playAudioFeedback } from "../lib/utils";
-import { CommandHistoryItem, Note, PomodoroMode, Task, TaskPriority, Team, TeamMember, TeamRole, ThemeName } from "../types";
+import { CommandHistoryItem, Note, PomodoroMode, Task, TaskPriority, Team, TeamMember, TeamRole, ThemeName, UserProfile } from "../types";
 
 interface UseCliProps {
   tasks: Task[];
@@ -11,6 +11,8 @@ interface UseCliProps {
   activeTeam?: Team | null;
   isLoggedIn?: boolean;
   createTeam?: (name: string, description: string) => Team;
+  joinTeamByCode?: (code: string) => Promise<{ success: boolean; message: string; team?: Team }>;
+  searchProfiles?: (query: string) => Promise<UserProfile[]>;
   addTeamMember?: (teamId: string, name: string, email: string, role: TeamRole) => TeamMember | null;
   removeTeamMember?: (teamId: string, memberId: string) => boolean;
   switchTeam?: (teamId: string) => void;
@@ -44,6 +46,8 @@ export function useCli({
   activeTeam,
   isLoggedIn = false,
   createTeam,
+  joinTeamByCode,
+  searchProfiles,
   addTeamMember,
   removeTeamMember,
   switchTeam,
@@ -58,6 +62,7 @@ export function useCli({
   pomodoro,
   changeTheme,
   cycleTheme,
+
 }: UseCliProps) {
   const [history, setHistory] = useState<CommandHistoryItem[]>([
     {
@@ -144,7 +149,8 @@ export function useCli({
           "  note <título> | <conteúdo>                 - Cria uma anotação",
           "  notes                                      - Lista anotações salvas",
           "  rmnote <id|número>                         - Remove uma anotação",
-          "  team [list|create|switch|info|member]      - Gerencia equipes e membros",
+          "  team [list|create|join|switch|info|member] - Gerencia equipes e membros",
+          "  user search [termo]                        - Pesquisa usuários cadastrados",
           "  pomodoro [start|pause|reset|25|50|5|15]    - Controla o timer Pomodoro",
           "  theme [dark|light|matrix|dracula|cyberpunk|nord] - Altera o tema",
           "  sync                                       - Sincroniza com Supabase",
@@ -448,6 +454,24 @@ export function useCli({
               ], 'success');
             }
           }
+        } else if (sub === 'join') {
+          const code = args[1];
+          if (!code) {
+            addHistoryEntry(input, ["Uso: team join <código>"], 'error');
+          } else if (!isLoggedIn) {
+            addHistoryEntry(input, [
+              "Erro: Você precisa estar autenticado para entrar em uma equipe.",
+              "Faça login usando o botão 'Entrar' no canto superior direito.",
+            ], 'error');
+          } else if (joinTeamByCode) {
+            addHistoryEntry(input, [`Buscando equipe com o código "${code.toUpperCase()}"...`], 'info');
+            const res = await joinTeamByCode(code);
+            if (res.success) {
+              addHistoryEntry(input, [`✓ ${res.message}`], 'success');
+            } else {
+              addHistoryEntry(input, [`Erro: ${res.message}`], 'error');
+            }
+          }
         } else if (sub === 'switch') {
           const query = args[1]?.toLowerCase();
           if (!query) {
@@ -525,11 +549,35 @@ export function useCli({
             "Opções de team:",
             "  team list                    - Lista todas as equipes",
             "  team create <nome> [desc]   - Cria nova equipe",
+            "  team join <código>           - Entra em uma equipe existente",
             "  team switch <nome|código>    - Alterna a equipe ativa",
             "  team info                    - Detalhes da equipe ativa",
             "  team member add <nome> <email> [role] - Adiciona membro",
             "  team member rm <email|id>    - Remove membro",
           ], 'info');
+        }
+        break;
+      }
+
+      case 'user': {
+        const sub = args[0]?.toLowerCase();
+        if (sub === 'search') {
+          const term = args.slice(1).join(' ');
+          if (searchProfiles) {
+            addHistoryEntry(input, [`Pesquisando usuários por "${term || 'todos'}"...`], 'info');
+            const profiles = await searchProfiles(term);
+            if (profiles.length === 0) {
+              addHistoryEntry(input, ["Nenhum usuário cadastrado encontrado."], 'warn');
+            } else {
+              const lines = [`USUÁRIOS CADASTRADOS (${profiles.length}):`];
+              profiles.forEach(p => {
+                lines.push(`  • ${p.name} — ${p.email}`);
+              });
+              addHistoryEntry(input, lines, 'info');
+            }
+          }
+        } else {
+          addHistoryEntry(input, ["Uso: user search [nome ou e-mail]"], 'info');
         }
         break;
       }

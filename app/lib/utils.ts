@@ -25,7 +25,7 @@ export function formatDate(timestamp: number): string {
   });
 }
 
-export function playAudioFeedback(type: 'beep' | 'success' | 'alarm' | 'click'): void {
+export function playAudioFeedback(type: 'beep' | 'success' | 'alarm' | 'click' | 'error'): void {
   if (typeof window === 'undefined') return;
 
   try {
@@ -58,6 +58,18 @@ export function playAudioFeedback(type: 'beep' | 'success' | 'alarm' | 'click'):
       gain.connect(ctx.destination);
       osc.start(now);
       osc.stop(now + 0.1);
+    } else if (type === 'error') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(200, now);
+      osc.frequency.linearRampToValueAtTime(100, now + 0.15);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.15);
     } else if (type === 'success') {
       const notes = [523.25, 659.25, 783.99];
       notes.forEach((freq, i) => {
@@ -91,3 +103,4 @@ export function playAudioFeedback(type: 'beep' | 'success' | 'alarm' | 'click'):
     return;
   }
 }
+
