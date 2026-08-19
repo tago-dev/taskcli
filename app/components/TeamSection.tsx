@@ -15,6 +15,7 @@ import {
   LogIn,
   Mail,
   Plus,
+  RefreshCw,
   Search,
   Shield,
   Trash2,
@@ -40,6 +41,7 @@ interface TeamSectionProps {
   onRemoveMember: (teamId: string, memberId: string) => void;
   onUpdateMemberRole: (teamId: string, memberId: string, role: TeamRole) => void;
   onSearchProfiles?: (query: string) => Promise<UserProfile[]>;
+  onSyncClerkUsers?: () => Promise<{ success: boolean; count: number; users?: UserProfile[] }>;
   onJoinTeamByCode?: (code: string) => Promise<{ success: boolean; message: string }>;
 }
 
@@ -54,6 +56,7 @@ export function TeamSection({
   onRemoveMember,
   onUpdateMemberRole,
   onSearchProfiles,
+  onSyncClerkUsers,
   onJoinTeamByCode,
 }: TeamSectionProps) {
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
@@ -69,6 +72,8 @@ export function TeamSection({
   const [searchUserQuery, setSearchUserQuery] = useState("");
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [isSyncingClerk, setIsSyncingClerk] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   const [isJoiningByCode, setIsJoiningByCode] = useState(false);
   const [teamCodeInput, setTeamCodeInput] = useState("");
@@ -132,6 +137,25 @@ export function TeamSection({
     setNewMemberName(profile.name);
     setNewMemberEmail(profile.email);
     setNewMemberAvatar(profile.avatarUrl);
+  };
+
+  const handleSyncClerk = async () => {
+    if (!onSyncClerkUsers) return;
+    setIsSyncingClerk(true);
+    setSyncFeedback(null);
+
+    const res = await onSyncClerkUsers();
+    setIsSyncingClerk(false);
+    if (res.success) {
+      if (res.users) {
+        setSearchResults(res.users);
+      }
+      setSyncFeedback(`${res.count} usuário(s) sincronizado(s) do Clerk!`);
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } else {
+      setSyncFeedback("Erro ao sincronizar do Clerk.");
+      setTimeout(() => setSyncFeedback(null), 3000);
+    }
   };
 
   const handleJoinByCode = async (e: React.FormEvent) => {
@@ -519,9 +543,30 @@ export function TeamSection({
           </div>
 
           <div className="space-y-3 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl p-4">
-            <label className="block text-xs font-mono uppercase text-[var(--text-dim)] font-semibold">
-              Pesquisar Usuário Registrado (Nome ou E-mail)
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-mono uppercase text-[var(--text-dim)] font-semibold">
+                Pesquisar Usuário Registrado (Nome ou E-mail)
+              </label>
+              {onSyncClerkUsers && (
+                <button
+                  type="button"
+                  onClick={handleSyncClerk}
+                  disabled={isSyncingClerk}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors disabled:opacity-50"
+                  title="Puxar todos os usuários já cadastrados no Clerk"
+                >
+                  <RefreshCw className={`w-3 h-3 text-[var(--accent)] ${isSyncingClerk ? "animate-spin" : ""}`} />
+                  <span>{isSyncingClerk ? "Puxando..." : "Puxar do Clerk"}</span>
+                </button>
+              )}
+            </div>
+
+            {syncFeedback && (
+              <div className="text-xs font-mono text-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 rounded-lg border border-[var(--accent)]/30">
+                {syncFeedback}
+              </div>
+            )}
+
             <div className="relative">
               <Search className="w-4 h-4 text-[var(--text-dim)] absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input

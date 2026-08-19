@@ -13,6 +13,7 @@ interface UseCliProps {
   createTeam?: (name: string, description: string) => Team;
   joinTeamByCode?: (code: string) => Promise<{ success: boolean; message: string; team?: Team }>;
   searchProfiles?: (query: string) => Promise<UserProfile[]>;
+  syncClerkUsers?: () => Promise<{ success: boolean; count: number; users?: UserProfile[] }>;
   addTeamMember?: (teamId: string, name: string, email: string, role: TeamRole) => TeamMember | null;
   removeTeamMember?: (teamId: string, memberId: string) => boolean;
   switchTeam?: (teamId: string) => void;
@@ -48,6 +49,7 @@ export function useCli({
   createTeam,
   joinTeamByCode,
   searchProfiles,
+  syncClerkUsers,
   addTeamMember,
   removeTeamMember,
   switchTeam,
@@ -150,7 +152,7 @@ export function useCli({
           "  notes                                      - Lista anotações salvas",
           "  rmnote <id|número>                         - Remove uma anotação",
           "  team [list|create|join|switch|info|member] - Gerencia equipes e membros",
-          "  user search [termo]                        - Pesquisa usuários cadastrados",
+          "  user [search|sync]                         - Pesquisa e sincroniza usuários do Clerk",
           "  pomodoro [start|pause|reset|25|50|5|15]    - Controla o timer Pomodoro",
           "  theme [dark|light|matrix|dracula|cyberpunk|nord] - Altera o tema",
           "  sync                                       - Sincroniza com Supabase",
@@ -576,8 +578,22 @@ export function useCli({
               addHistoryEntry(input, lines, 'info');
             }
           }
+        } else if (sub === 'sync') {
+          if (syncClerkUsers) {
+            addHistoryEntry(input, ["Puxando usuários já cadastrados no Clerk..."], 'info');
+            const res = await syncClerkUsers();
+            if (res.success) {
+              addHistoryEntry(input, [`✓ ${res.count} usuário(s) sincronizado(s) do Clerk com sucesso!`], 'success');
+            } else {
+              addHistoryEntry(input, ["Não foi possível sincronizar usuários do Clerk."], 'error');
+            }
+          }
         } else {
-          addHistoryEntry(input, ["Uso: user search [nome ou e-mail]"], 'info');
+          addHistoryEntry(input, [
+            "Opções de user:",
+            "  user search [nome ou e-mail] - Pesquisa usuários",
+            "  user sync                    - Puxa todos os usuários cadastrados no Clerk",
+          ], 'info');
         }
         break;
       }
