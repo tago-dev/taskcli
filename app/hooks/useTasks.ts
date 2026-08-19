@@ -1,8 +1,14 @@
 'use client';
 
 import confetti from "canvas-confetti";
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { getStoredTasks, setStoredTasks } from "../lib/storage";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { setStoredTasks } from "../lib/storage";
+import {
+  createTaskInSupabase,
+  deleteTaskInSupabase,
+  fetchTasksFromSupabase,
+  updateTaskInSupabase,
+} from "../lib/supabaseDb";
 import { generateId, playAudioFeedback } from "../lib/utils";
 import { Task, TaskPriority } from "../types";
 
@@ -56,18 +62,22 @@ function subscribeToTasks(listener: () => void) {
 function getTasksSnapshot(): Task[] {
   if (typeof window === "undefined") return defaultInitialTasks;
   if (tasksCache === null) {
-    const stored = getStoredTasks();
-    if (stored.length === 0) {
+    try {
+      const data = localStorage.getItem("taskcli_tasks");
+      if (data) {
+        tasksCache = JSON.parse(data);
+      } else {
+        tasksCache = defaultInitialTasks;
+        setStoredTasks(defaultInitialTasks);
+      }
+    } catch {
       tasksCache = defaultInitialTasks;
-      setStoredTasks(defaultInitialTasks);
-    } else {
-      tasksCache = stored;
     }
   }
-  return tasksCache;
+  return tasksCache || defaultInitialTasks;
 }
 
-export function useTasks() {
+export function useTasks(userId?: string | null) {
   const tasks = useSyncExternalStore(
     subscribeToTasks,
     getTasksSnapshot,
@@ -79,11 +89,18 @@ export function useTasks() {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
   const [selectedTag, setSelectedTag] = useState<string | 'all'>('all');
 
-  const saveTasks = (newTasks: Task[]) => {
+  const saveTasks = useCallback((newTasks: Task[]) => {
     tasksCache = newTasks;
     setStoredTasks(newTasks);
     emitTasksChange();
-  };
+  }, []);
+
+  const loadFromSupabase = useCallback(async (uid: string) => {
+    const remoteTasks = await fetchTasksFromSupabase(uid);
+    if (remoteTasks !== null && remoteTasks.length > 0) {
+      saveTasks(remoteTasks);
+    }
+  }, [saveTasks]);
 
   const addTask = (
     title: string,
@@ -105,6 +122,11 @@ export function useTasks() {
     const updated = [newTask, ...tasks];
     saveTasks(updated);
     playAudioFeedback('click');
+
+    if (userId) {
+      createTaskInSupabase(newTask, userId);
+    }
+
     return newTask;
   };
 
@@ -133,13 +155,19 @@ export function useTasks() {
           colors: ['#10b981', '#00ff66', '#ff79c6', '#88c0d0', '#ffe600']
         });
       } catch {
-        // Fallback
+        // Safe fallback
       }
     } else {
       playAudioFeedback('click');
     }
 
     saveTasks(updated);
+
+    if (userId && toggledTask) {
+      const t = toggledTask as Task;
+      updateTaskInSupabase(id, { completed: t.completed, completedAt: t.completedAt }, userId);
+    }
+
     return toggledTask;
   };
 
@@ -149,6 +177,11 @@ export function useTasks() {
     const updated = tasks.filter(t => t.id !== id);
     saveTasks(updated);
     playAudioFeedback('click');
+
+    if (userId) {
+      deleteTaskInSupabase(id, userId);
+    }
+
     return true;
   };
 
@@ -164,31 +197,52 @@ export function useTasks() {
     if (updatedTask) {
       saveTasks(updated);
       playAudioFeedback('click');
+
+      if (userId) {
+        updateTaskInSupabase(id, updates, userId);
+      }
     }
     return updatedTask;
   };
 
   const incrementPomodoro = (id: string): void => {
+    let currentPomos = 0;
     const updated = tasks.map(t => {
       if (t.id === id) {
-        return { ...t, completedPomodoros: t.completedPomodoros + 1 };
+        currentPomos = t.completedPomodoros + 1;
+        return { ...t, completedPomodoros: currentPomos };
       }
       return t;
     });
     saveTasks(updated);
+
+    if (userId) {
+      updateTaskInSupabase(id, { completedPomodoros: currentPomos }, userId);
+    }
   };
 
   const clearCompleted = (): number => {
-    const completedCount = tasks.filter(t => t.completed).length;
+    const completedList = tasks.filter(t => t.completed);
+    const completedCount = completedList.length;
     const updated = tasks.filter(t => !t.completed);
     saveTasks(updated);
     playAudioFeedback('click');
+
+    if (userId) {
+      completedList.forEach(t => deleteTaskInSupabase(t.id, userId));
+    }
+
     return completedCount;
   };
 
   const clearAll = (): void => {
+    const previous = [...tasks];
     saveTasks([]);
     playAudioFeedback('click');
+
+    if (userId) {
+      previous.forEach(t => deleteTaskInSupabase(t.id, userId));
+    }
   };
 
   const allTags = useMemo(() => {
@@ -251,6 +305,8 @@ export function useTasks() {
     incrementPomodoro,
     clearCompleted,
     clearAll,
+    saveTasks,
+    loadFromSupabase,
     mounted: true,
   };
 }

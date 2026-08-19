@@ -14,6 +14,7 @@ interface UseCliProps {
   clearAllTasks: () => void;
   addNote: (title: string, content: string, tags?: string[]) => Note;
   removeNote: (id: string) => boolean;
+  onSync?: () => Promise<boolean>;
   pomodoro: {
     start: () => void;
     pause: () => void;
@@ -39,6 +40,7 @@ export function useCli({
   clearAllTasks,
   addNote,
   removeNote,
+  onSync,
   pomodoro,
   changeTheme,
   cycleTheme,
@@ -105,7 +107,7 @@ export function useCli({
     return partial ? partial.id : null;
   };
 
-  const executeCommand = (rawInput: string) => {
+  const executeCommand = async (rawInput: string) => {
     const input = rawInput.trim();
     if (!input) return;
 
@@ -130,6 +132,7 @@ export function useCli({
           "  rmnote <id|número>                         - Remove uma anotação",
           "  pomodoro [start|pause|reset|25|50|5|15]    - Controla o timer Pomodoro",
           "  theme [dark|light|matrix|dracula|cyberpunk|nord] - Altera o tema",
+          "  sync                                       - Sincroniza com Supabase",
           "  stats                                      - Mostra resumo de produtividade",
           "  clear / cls                                - Limpa o histórico do terminal",
           "  clear tasks / clear completed              - Remove tarefas concluídas ou todas",
@@ -325,6 +328,21 @@ export function useCli({
         }
         removeNote(noteId);
         addHistoryEntry(input, [`✓ Nota [${noteId}] removida.`], 'success');
+        break;
+      }
+
+      case 'sync': {
+        if (onSync) {
+          addHistoryEntry(input, ["Sincronizando tarefas e notas com Supabase..."], 'info');
+          const ok = await onSync();
+          if (ok) {
+            addHistoryEntry(input, ["✓ Sincronização com Supabase concluída com sucesso."], 'success');
+          } else {
+            addHistoryEntry(input, ["Aviso: Verifique se o usuário está autenticado e as chaves do Supabase configuradas."], 'warn');
+          }
+        } else {
+          addHistoryEntry(input, ["Sincronização indisponível."], 'warn');
+        }
         break;
       }
 

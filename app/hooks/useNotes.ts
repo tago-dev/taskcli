@@ -1,7 +1,13 @@
 'use client';
 
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { getStoredNotes, setStoredNotes } from "../lib/storage";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { setStoredNotes } from "../lib/storage";
+import {
+  createNoteInSupabase,
+  deleteNoteInSupabase,
+  fetchNotesFromSupabase,
+  updateNoteInSupabase,
+} from "../lib/supabaseDb";
 import { generateId, playAudioFeedback } from "../lib/utils";
 import { Note } from "../types";
 
@@ -43,18 +49,22 @@ function subscribeToNotes(listener: () => void) {
 function getNotesSnapshot(): Note[] {
   if (typeof window === "undefined") return defaultInitialNotes;
   if (notesCache === null) {
-    const stored = getStoredNotes();
-    if (stored.length === 0) {
+    try {
+      const data = localStorage.getItem("taskcli_notes");
+      if (data) {
+        notesCache = JSON.parse(data);
+      } else {
+        notesCache = defaultInitialNotes;
+        setStoredNotes(defaultInitialNotes);
+      }
+    } catch {
       notesCache = defaultInitialNotes;
-      setStoredNotes(defaultInitialNotes);
-    } else {
-      notesCache = stored;
     }
   }
-  return notesCache;
+  return notesCache || defaultInitialNotes;
 }
 
-export function useNotes() {
+export function useNotes(userId?: string | null) {
   const notes = useSyncExternalStore(
     subscribeToNotes,
     getNotesSnapshot,
@@ -64,11 +74,18 @@ export function useNotes() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | 'all'>('all');
 
-  const saveNotes = (newNotes: Note[]) => {
+  const saveNotes = useCallback((newNotes: Note[]) => {
     notesCache = newNotes;
     setStoredNotes(newNotes);
     emitNotesChange();
-  };
+  }, []);
+
+  const loadFromSupabase = useCallback(async (uid: string) => {
+    const remoteNotes = await fetchNotesFromSupabase(uid);
+    if (remoteNotes !== null && remoteNotes.length > 0) {
+      saveNotes(remoteNotes);
+    }
+  }, [saveNotes]);
 
   const addNote = (title: string, content: string, tags: string[] = [], pinned: boolean = false): Note => {
     const newNote: Note = {
@@ -84,6 +101,11 @@ export function useNotes() {
     const updated = [newNote, ...notes];
     saveNotes(updated);
     playAudioFeedback('click');
+
+    if (userId) {
+      createNoteInSupabase(newNote, userId);
+    }
+
     return newNote;
   };
 
@@ -104,6 +126,10 @@ export function useNotes() {
     if (updatedNote) {
       saveNotes(updated);
       playAudioFeedback('click');
+
+      if (userId) {
+        updateNoteInSupabase(id, updates, userId);
+      }
     }
     return updatedNote;
   };
@@ -114,6 +140,11 @@ export function useNotes() {
     const updated = notes.filter(n => n.id !== id);
     saveNotes(updated);
     playAudioFeedback('click');
+
+    if (userId) {
+      deleteNoteInSupabase(id, userId);
+    }
+
     return true;
   };
 
@@ -130,6 +161,10 @@ export function useNotes() {
     if (toggled) {
       saveNotes(updated);
       playAudioFeedback('click');
+
+      if (userId) {
+        updateNoteInSupabase(id, { pinned: (toggled as Note).pinned }, userId);
+      }
     }
     return toggled;
   };
@@ -172,6 +207,8 @@ export function useNotes() {
     updateNote,
     removeNote,
     togglePinNote,
+    saveNotes,
+    loadFromSupabase,
     mounted: true,
   };
 }

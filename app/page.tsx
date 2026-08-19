@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
 import { CommandPalette } from "./components/CommandPalette";
 import { Header } from "./components/Header";
 import { NotesSection } from "./components/NotesSection";
@@ -12,12 +13,17 @@ import { useNotes } from "./hooks/useNotes";
 import { usePomodoro } from "./hooks/usePomodoro";
 import { useTasks } from "./hooks/useTasks";
 import { useTheme } from "./hooks/useTheme";
+import { isSupabaseConfigured } from "./lib/supabaseClient";
+import { bulkSyncToSupabase } from "./lib/supabaseDb";
 import { ViewTab } from "./types";
 
 export default function Home() {
   const [currentTab, setCurrentTab] = useState<ViewTab>("all");
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
+
+  const { user, isLoaded: userLoaded } = useUser();
+  const userId = user?.id || null;
 
   const { theme, changeTheme, cycleTheme, mounted: themeMounted } = useTheme();
 
@@ -41,8 +47,9 @@ export default function Home() {
     incrementPomodoro,
     clearCompleted,
     clearAll: clearAllTasks,
+    loadFromSupabase: loadTasksFromSupabase,
     mounted: tasksMounted,
-  } = useTasks();
+  } = useTasks(userId);
 
   const {
     notes,
@@ -56,8 +63,21 @@ export default function Home() {
     updateNote,
     removeNote,
     togglePinNote,
+    loadFromSupabase: loadNotesFromSupabase,
     mounted: notesMounted,
-  } = useNotes();
+  } = useNotes(userId);
+
+  useEffect(() => {
+    if (userId && isSupabaseConfigured) {
+      loadTasksFromSupabase(userId);
+      loadNotesFromSupabase(userId);
+    }
+  }, [userId, loadTasksFromSupabase, loadNotesFromSupabase]);
+
+  const handleManualSync = async (): Promise<boolean> => {
+    if (!userId || !isSupabaseConfigured) return false;
+    return await bulkSyncToSupabase(tasks, notes, userId);
+  };
 
   const pomodoro = usePomodoro(taskId => {
     if (taskId) {
@@ -80,6 +100,7 @@ export default function Home() {
     clearAllTasks,
     addNote,
     removeNote,
+    onSync: handleManualSync,
     pomodoro: {
       start: pomodoro.start,
       pause: pomodoro.pause,
@@ -97,7 +118,7 @@ export default function Home() {
 
   const activeTask = tasks.find(t => t.id === pomodoro.activeTaskId) || null;
 
-  const isLoaded = themeMounted && tasksMounted && notesMounted && pomodoro.mounted;
+  const isLoaded = themeMounted && tasksMounted && notesMounted && pomodoro.mounted && userLoaded;
 
   if (!isLoaded) {
     return (
@@ -121,6 +142,7 @@ export default function Home() {
         totalTasks={stats.total}
         pomodoroSessions={pomodoro.sessionsCompleted}
         onOpenHelp={() => setIsCommandPaletteOpen(true)}
+        isCloudSyncActive={Boolean(userId && isSupabaseConfigured)}
       />
 
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 space-y-8">

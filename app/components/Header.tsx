@@ -9,8 +9,10 @@ import {
 import {
   CheckCircle2,
   Clock,
+  Cloud,
   Command,
   FileText,
+  HardDrive,
   Layers,
   LogIn,
   Palette,
@@ -28,6 +30,7 @@ interface HeaderProps {
   totalTasks: number;
   pomodoroSessions: number;
   onOpenHelp: () => void;
+  isCloudSyncActive?: boolean;
 }
 
 export function Header({
@@ -39,6 +42,7 @@ export function Header({
   totalTasks,
   pomodoroSessions,
   onOpenHelp,
+  isCloudSyncActive = false,
 }: HeaderProps) {
   const themeColors: Record<ThemeName, string> = {
     dark: "#10b981",
@@ -71,6 +75,26 @@ export function Header({
             <span className="flex items-center gap-2 bg-[var(--bg-main)] px-3.5 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-muted)]">
               <Clock className="w-4 h-4 text-[var(--warning)]" />
               <span>{pomodoroSessions} ciclos</span>
+            </span>
+            <span
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-colors ${
+                isCloudSyncActive
+                  ? "bg-[var(--accent-soft)] border-[var(--accent)]/40 text-[var(--accent)] font-semibold"
+                  : "bg-[var(--bg-main)] border-[var(--border-color)] text-[var(--text-dim)]"
+              }`}
+              title={isCloudSyncActive ? "Sincronização em nuvem com Supabase ativa" : "Armazenamento local"}
+            >
+              {isCloudSyncActive ? (
+                <>
+                  <Cloud className="w-4 h-4" />
+                  <span>Supabase</span>
+                </>
+              ) : (
+                <>
+                  <HardDrive className="w-4 h-4" />
+                  <span>Local</span>
+                </>
+              )}
             </span>
           </div>
         </div>
