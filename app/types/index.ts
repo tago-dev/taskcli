@@ -75,3 +75,13 @@ export interface Team {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+

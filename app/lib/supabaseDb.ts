@@ -1,4 +1,4 @@
-import { Note, Task, TaskPriority, Team, TeamMember, TeamRole } from "../types";
+import { Note, Task, TaskPriority, Team, TeamMember, TeamRole, UserProfile } from "../types";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 interface SupabaseTaskRow {
@@ -44,6 +44,73 @@ interface SupabaseTeamMemberRow {
   role: TeamRole;
   avatar_url: string | null;
   joined_at: number;
+}
+
+interface SupabaseProfileRow {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function syncUserProfileToSupabase(profile: UserProfile): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase || !profile.id) return false;
+
+  try {
+    const { error } = await supabase.from("profiles").upsert({
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      avatar_url: profile.avatarUrl || null,
+      created_at: profile.createdAt,
+      updated_at: profile.updatedAt,
+    }, { onConflict: "id" });
+
+    if (!error && profile.email) {
+      await supabase
+        .from("team_members")
+        .update({
+          user_id: profile.id,
+          avatar_url: profile.avatarUrl || null,
+        })
+        .ilike("email", profile.email)
+        .is("user_id", null);
+    }
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function searchProfilesInSupabase(query: string): Promise<UserProfile[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+
+  try {
+    const cleanQuery = query.trim();
+    let req = supabase.from("profiles").select("*");
+
+    if (cleanQuery) {
+      req = req.or(`name.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%`);
+    }
+
+    const { data, error } = await req.order("updated_at", { ascending: false }).limit(20);
+
+    if (error || !data) return [];
+
+    return (data as SupabaseProfileRow[]).map(row => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      avatarUrl: row.avatar_url || undefined,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchTasksFromSupabase(userId: string): Promise<Task[] | null> {
@@ -234,28 +301,56 @@ export async function deleteNoteInSupabase(noteId: string, userId: string): Prom
   }
 }
 
-export async function fetchTeamsFromSupabase(userId: string): Promise<Team[] | null> {
+export async function fetchTeamsFromSupabase(userId: string, userEmail?: string | null): Promise<Team[] | null> {
   if (!isSupabaseConfigured || !supabase || !userId) return null;
 
   try {
+    const { data: ownedTeams } = await supabase
+      .from("teams")
+      .select("*")
+      .eq("user_id", userId);
+
+    let memberTeamIds: string[] = [];
+
+    const memberQueries: string[] = [];
+    if (userId) {
+      memberQueries.push(`user_id.eq.${userId}`);
+    }
+    if (userEmail && userEmail.trim()) {
+      memberQueries.push(`email.ilike.${userEmail.trim()}`);
+    }
+
+    if (memberQueries.length > 0) {
+      const { data: memberRows } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .or(memberQueries.join(","));
+
+      if (memberRows && memberRows.length > 0) {
+        memberTeamIds = memberRows.map(m => m.team_id);
+      }
+    }
+
+    const allTeamIds = Array.from(
+      new Set([...(ownedTeams || []).map(t => t.id), ...memberTeamIds])
+    );
+
+    if (allTeamIds.length === 0) return [];
+
     const { data: teamRows, error: teamError } = await supabase
       .from("teams")
       .select("*")
-      .eq("user_id", userId)
+      .in("id", allTeamIds)
       .order("created_at", { ascending: false });
 
     if (teamError || !teamRows) return null;
 
-    const teamIds = teamRows.map(t => t.id);
-    let memberRows: SupabaseTeamMemberRow[] = [];
+    const { data: mRows } = await supabase
+      .from("team_members")
+      .select("*")
+      .in("team_id", allTeamIds);
 
-    if (teamIds.length > 0) {
-      const { data: mRows } = await supabase
-        .from("team_members")
-        .select("*")
-        .in("team_id", teamIds);
-      if (mRows) memberRows = mRows as SupabaseTeamMemberRow[];
-    }
+    const memberRows = (mRows || []) as SupabaseTeamMemberRow[];
 
     return (teamRows as SupabaseTeamRow[]).map(t => ({
       id: t.id,
@@ -278,6 +373,77 @@ export async function fetchTeamsFromSupabase(userId: string): Promise<Team[] | n
     }));
   } catch {
     return null;
+  }
+}
+
+export async function joinTeamByCodeInSupabase(
+  code: string,
+  member: TeamMember
+): Promise<{ team: Team | null; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) return { team: null, error: "Supabase não configurado" };
+
+  try {
+    const cleanCode = code.trim().toUpperCase();
+    const { data: teamRow, error: teamErr } = await supabase
+      .from("teams")
+      .select("*")
+      .ilike("code", cleanCode)
+      .single();
+
+    if (teamErr || !teamRow) {
+      return { team: null, error: "Equipe não encontrada com esse código." };
+    }
+
+    const { data: existingMembers } = await supabase
+      .from("team_members")
+      .select("*")
+      .eq("team_id", teamRow.id);
+
+    const memberList = (existingMembers || []) as SupabaseTeamMemberRow[];
+    const alreadyMember = memberList.some(
+      m => (member.email && m.email.toLowerCase() === member.email.toLowerCase()) ||
+           (member.id && m.user_id === member.id)
+    );
+
+    if (!alreadyMember) {
+      await supabase.from("team_members").insert({
+        id: member.id,
+        team_id: teamRow.id,
+        user_id: member.id || null,
+        name: member.name,
+        email: member.email,
+        role: member.role || "member",
+        avatar_url: member.avatarUrl || null,
+        joined_at: member.joinedAt || Date.now(),
+      });
+    }
+
+    const { data: updatedMembers } = await supabase
+      .from("team_members")
+      .select("*")
+      .eq("team_id", teamRow.id);
+
+    const fullTeam: Team = {
+      id: teamRow.id,
+      name: teamRow.name,
+      description: teamRow.description || "",
+      ownerId: teamRow.user_id,
+      code: teamRow.code,
+      createdAt: Number(teamRow.created_at),
+      updatedAt: Number(teamRow.updated_at),
+      members: ((updatedMembers || []) as SupabaseTeamMemberRow[]).map(m => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        avatarUrl: m.avatar_url || undefined,
+        joinedAt: Number(m.joined_at),
+      })),
+    };
+
+    return { team: fullTeam };
+  } catch {
+    return { team: null, error: "Erro ao entrar na equipe." };
   }
 }
 
@@ -447,4 +613,5 @@ export async function bulkSyncToSupabase(
     return false;
   }
 }
+
 

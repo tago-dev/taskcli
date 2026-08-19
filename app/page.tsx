@@ -16,7 +16,7 @@ import { useTasks } from "./hooks/useTasks";
 import { useTeams } from "./hooks/useTeams";
 import { useTheme } from "./hooks/useTheme";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
-import { bulkSyncToSupabase } from "./lib/supabaseDb";
+import { bulkSyncToSupabase, syncUserProfileToSupabase } from "./lib/supabaseDb";
 import { ViewTab } from "./types";
 
 export default function Home() {
@@ -28,6 +28,7 @@ export default function Home() {
   const userId = user?.id || null;
   const userName = user?.fullName || user?.firstName || null;
   const userEmail = user?.primaryEmailAddress?.emailAddress || null;
+  const userAvatar = user?.imageUrl || undefined;
 
   const { theme, changeTheme, cycleTheme, mounted: themeMounted } = useTheme();
 
@@ -76,6 +77,8 @@ export default function Home() {
     activeTeam,
     setActiveTeamId,
     createTeam,
+    joinTeamByCode,
+    searchProfiles,
     updateTeam,
     deleteTeam,
     addMember,
@@ -87,11 +90,19 @@ export default function Home() {
 
   useEffect(() => {
     if (userId && isSupabaseConfigured) {
+      syncUserProfileToSupabase({
+        id: userId,
+        name: userName || "Usuário TaskCli",
+        email: userEmail || "",
+        avatarUrl: userAvatar,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
       loadTasksFromSupabase(userId);
       loadNotesFromSupabase(userId);
-      loadTeamsFromSupabase(userId);
+      loadTeamsFromSupabase(userId, userEmail);
     }
-  }, [userId, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase]);
+  }, [userId, userName, userEmail, userAvatar, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase]);
 
   const handleManualSync = async (): Promise<boolean> => {
     if (!userId || !isSupabaseConfigured) return false;
@@ -116,6 +127,8 @@ export default function Home() {
     activeTeam,
     isLoggedIn: Boolean(userId),
     createTeam,
+    joinTeamByCode,
+    searchProfiles,
     addTeamMember: addMember,
     removeTeamMember: removeMember,
     switchTeam: setActiveTeamId,
@@ -141,6 +154,7 @@ export default function Home() {
     changeTheme,
     cycleTheme,
   });
+
 
   const activeTask = tasks.find(t => t.id === pomodoro.activeTaskId) || null;
 
@@ -378,6 +392,8 @@ export default function Home() {
               onAddMember={addMember}
               onRemoveMember={removeMember}
               onUpdateMemberRole={updateMemberRole}
+              onSearchProfiles={searchProfiles}
+              onJoinTeamByCode={joinTeamByCode}
             />
           </div>
         )}
