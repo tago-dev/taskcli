@@ -126,9 +126,32 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     }
   }, [saveTeams, activeTeamId]);
 
-  const searchProfiles = useCallback(async (query: string): Promise<UserProfile[]> => {
-    return await searchProfilesInSupabase(query);
+  const syncClerkUsers = useCallback(async (): Promise<{ success: boolean; count: number; users?: UserProfile[] }> => {
+    try {
+      const res = await fetch("/api/users/sync", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        return { success: true, count: data.synced || 0, users: data.users || [] };
+      }
+      return { success: false, count: 0 };
+    } catch {
+      return { success: false, count: 0 };
+    }
   }, []);
+
+  const searchProfiles = useCallback(async (query: string): Promise<UserProfile[]> => {
+    const results = await searchProfilesInSupabase(query);
+    if (results.length > 0) return results;
+
+    const syncRes = await syncClerkUsers();
+    if (syncRes.success && syncRes.users) {
+      if (!query.trim()) return syncRes.users;
+      const q = query.toLowerCase();
+      return syncRes.users.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+    }
+
+    return [];
+  }, [syncClerkUsers]);
 
   const createTeam = useCallback((
     name: string,
@@ -387,6 +410,7 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     createTeam,
     joinTeamByCode,
     searchProfiles,
+    syncClerkUsers,
     updateTeam,
     deleteTeam,
     addMember,

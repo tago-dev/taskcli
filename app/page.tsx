@@ -79,6 +79,7 @@ export default function Home() {
     createTeam,
     joinTeamByCode,
     searchProfiles,
+    syncClerkUsers,
     updateTeam,
     deleteTeam,
     addMember,
@@ -98,11 +99,12 @@ export default function Home() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
+      syncClerkUsers();
       loadTasksFromSupabase(userId);
       loadNotesFromSupabase(userId);
       loadTeamsFromSupabase(userId, userEmail);
     }
-  }, [userId, userName, userEmail, userAvatar, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase]);
+  }, [userId, userName, userEmail, userAvatar, syncClerkUsers, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase]);
 
   const handleManualSync = async (): Promise<boolean> => {
     if (!userId || !isSupabaseConfigured) return false;
@@ -129,6 +131,7 @@ export default function Home() {
     createTeam,
     joinTeamByCode,
     searchProfiles,
+    syncClerkUsers,
     addTeamMember: addMember,
     removeTeamMember: removeMember,
     switchTeam: setActiveTeamId,
@@ -393,6 +396,7 @@ export default function Home() {
               onRemoveMember={removeMember}
               onUpdateMemberRole={updateMemberRole}
               onSearchProfiles={searchProfiles}
+              onSyncClerkUsers={syncClerkUsers}
               onJoinTeamByCode={joinTeamByCode}
             />
           </div>
