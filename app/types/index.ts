@@ -10,6 +10,14 @@ export interface Task {
   completedPomodoros: number;
   createdAt: number;
   completedAt?: number;
+  teamId?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  assigneeEmail?: string;
+  assigneeAvatar?: string;
+  assignedById?: string;
+  assignedByName?: string;
+  assignedAt?: number;
 }
 
 export interface Note {

@@ -7,10 +7,13 @@ import {
   Tag,
   Timer,
   Trash2,
+  User,
+  Users,
   X,
 } from "lucide-react";
 import React, { useState } from "react";
-import { Task, TaskPriority } from "../types";
+import { AssignmentFilter } from "../hooks/useTasks";
+import { Task, TaskPriority, TeamMember } from "../types";
 import { TaskItem } from "./TaskItem";
 
 interface TaskListProps {
@@ -25,8 +28,33 @@ interface TaskListProps {
   selectedTag: string | "all";
   setSelectedTag: (tag: string | "all") => void;
   allTags: string[];
+  teamMembers?: TeamMember[];
+  isLeaderOrAdmin?: boolean;
+  currentUserId?: string | null;
+  currentUserEmail?: string | null;
+  currentUserName?: string | null;
+  activeTeamId?: string | null;
+  assignmentFilter?: AssignmentFilter;
+  setAssignmentFilter?: (filter: AssignmentFilter) => void;
+  selectedAssignee?: string | 'all';
+  setSelectedAssignee?: (assignee: string | 'all') => void;
   activePomodoroTaskId: string | null;
-  onAddTask: (title: string, priority: TaskPriority, tags: string[], pomodoros: number) => void;
+  onAddTask: (
+    title: string,
+    priority: TaskPriority,
+    tags: string[],
+    pomodoros: number,
+    assignmentOptions?: {
+      teamId?: string;
+      assigneeId?: string;
+      assigneeName?: string;
+      assigneeEmail?: string;
+      assigneeAvatar?: string;
+      assignedById?: string;
+      assignedByName?: string;
+    }
+  ) => void;
+  onAssignTask?: (taskId: string, member: TeamMember | null) => void;
   onToggleTask: (id: string) => void;
   onRemoveTask: (id: string) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
@@ -46,8 +74,19 @@ export function TaskList({
   selectedTag,
   setSelectedTag,
   allTags,
+  teamMembers = [],
+  isLeaderOrAdmin = false,
+  currentUserId,
+  currentUserEmail,
+  currentUserName,
+  activeTeamId,
+  assignmentFilter = 'all',
+  setAssignmentFilter,
+  selectedAssignee = 'all',
+  setSelectedAssignee,
   activePomodoroTaskId,
   onAddTask,
+  onAssignTask,
   onToggleTask,
   onRemoveTask,
   onUpdateTask,
@@ -58,6 +97,7 @@ export function TaskList({
   const [newPriority, setNewPriority] = useState<TaskPriority>("medium");
   const [newTagInput, setNewTagInput] = useState("");
   const [newPomodoros, setNewPomodoros] = useState<number>(1);
+  const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [showAdvancedAdd, setShowAdvancedAdd] = useState(false);
 
   const handleQuickAdd = (e: React.FormEvent) => {
@@ -68,6 +108,7 @@ export function TaskList({
     let priority = newPriority;
     let pomodoros = newPomodoros;
     const tags: string[] = [];
+    let assignedMember: TeamMember | undefined;
 
     if (newTagInput.trim()) {
       newTagInput
@@ -98,11 +139,37 @@ export function TaskList({
       parsedTitle = parsedTitle.replace(/~(\d+)/g, "");
     }
 
-    onAddTask(parsedTitle.trim(), priority, tags, pomodoros);
+    const memberMatch = parsedTitle.match(/@([\w.-]+)/);
+    if (memberMatch && teamMembers.length > 0) {
+      const query = memberMatch[1].toLowerCase();
+      assignedMember = teamMembers.find(
+        m => m.id.toLowerCase() === query ||
+             m.name.toLowerCase().includes(query) ||
+             m.email.toLowerCase().includes(query)
+      );
+      parsedTitle = parsedTitle.replace(/@([\w.-]+)/g, "");
+    }
+
+    if (!assignedMember && selectedMemberId && isLeaderOrAdmin) {
+      assignedMember = teamMembers.find(m => m.id === selectedMemberId);
+    }
+
+    const assignmentOptions = assignedMember ? {
+      teamId: activeTeamId || undefined,
+      assigneeId: assignedMember.id,
+      assigneeName: assignedMember.name,
+      assigneeEmail: assignedMember.email,
+      assigneeAvatar: assignedMember.avatarUrl,
+      assignedById: currentUserId || undefined,
+      assignedByName: currentUserName || "Líder",
+    } : (activeTeamId ? { teamId: activeTeamId } : undefined);
+
+    onAddTask(parsedTitle.trim(), priority, tags, pomodoros, assignmentOptions);
     setNewTitle("");
     setNewTagInput("");
     setNewPomodoros(1);
     setNewPriority("medium");
+    setSelectedMemberId("");
     setShowAdvancedAdd(false);
   };
 
@@ -117,7 +184,7 @@ export function TaskList({
             type="text"
             value={newTitle}
             onChange={e => setNewTitle(e.target.value)}
-            placeholder="Adicionar nova tarefa... (Ex: Revisar PR -p high #dev ~2)"
+            placeholder="Adicionar nova tarefa... (Ex: Revisar PR @membro -p high ~2)"
             className="flex-1 bg-transparent border-none outline-none text-sm sm:text-base text-[var(--text-main)] placeholder-[var(--text-dim)] font-sans min-w-0"
           />
           <div className="flex items-center gap-2 shrink-0">
@@ -153,6 +220,27 @@ export function TaskList({
               </select>
             </div>
 
+            {isLeaderOrAdmin && teamMembers.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-dim)] font-mono flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-[var(--accent)]" />
+                  Atribuir a:
+                </span>
+                <select
+                  value={selectedMemberId}
+                  onChange={e => setSelectedMemberId(e.target.value)}
+                  className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-3 py-1.5 text-xs sm:text-sm text-[var(--text-main)] outline-none font-mono"
+                >
+                  <option value="">Nenhum (Geral)</option>
+                  {teamMembers.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.role === "owner" ? "Líder" : m.role === "admin" ? "Admin" : "Membro"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <span className="text-[var(--text-dim)] font-mono">Pomodoros:</span>
               <div className="flex items-center gap-1.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-2.5 py-1.5">
@@ -174,7 +262,7 @@ export function TaskList({
                 type="text"
                 value={newTagInput}
                 onChange={e => setNewTagInput(e.target.value)}
-                placeholder="Tags separadas por espaço (ex: frontend urgente)"
+                placeholder="Tags (ex: backend api urgente)"
                 className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-3 py-1.5 text-xs sm:text-sm text-[var(--text-main)] outline-none font-mono"
               />
             </div>
@@ -182,7 +270,62 @@ export function TaskList({
         )}
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--border-color)]">
+      {setAssignmentFilter && (
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border-color)]">
+          <div className="flex items-center gap-1 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-color)] text-xs font-mono">
+            <button
+              onClick={() => setAssignmentFilter('all')}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                assignmentFilter === 'all'
+                  ? 'bg-[var(--accent)] text-[var(--accent-text)] font-semibold'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setAssignmentFilter('assigned_to_me')}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                assignmentFilter === 'assigned_to_me'
+                  ? 'bg-[var(--accent)] text-[var(--accent-text)] font-semibold'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+              }`}
+            >
+              Atribuídas a Mim
+            </button>
+            <button
+              onClick={() => setAssignmentFilter('team')}
+              className={`px-3 py-1 rounded-lg transition-colors ${
+                assignmentFilter === 'team'
+                  ? 'bg-[var(--accent)] text-[var(--accent-text)] font-semibold'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+              }`}
+            >
+              Equipe
+            </button>
+          </div>
+
+          {teamMembers.length > 0 && setSelectedAssignee && (
+            <div className="flex items-center gap-1.5 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl px-2.5 py-1 text-xs font-mono">
+              <Users className="w-3.5 h-3.5 text-[var(--text-dim)]" />
+              <select
+                value={selectedAssignee}
+                onChange={e => setSelectedAssignee(e.target.value)}
+                className="bg-transparent border-none outline-none text-xs text-[var(--text-main)] cursor-pointer"
+              >
+                <option value="all">Todos os Membros</option>
+                {teamMembers.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border-color)]">
         <div className="flex items-center gap-1 bg-[var(--bg-main)] p-1 rounded-xl border border-[var(--border-color)] text-xs sm:text-sm font-mono overflow-x-auto">
           <button
             onClick={() => setFilter("all")}
@@ -287,9 +430,14 @@ export function TaskList({
               key={task.id}
               task={task}
               isActiveForPomodoro={task.id === activePomodoroTaskId}
+              teamMembers={teamMembers}
+              isLeaderOrAdmin={isLeaderOrAdmin}
+              currentUserId={currentUserId}
+              currentUserEmail={currentUserEmail}
               onToggle={onToggleTask}
               onRemove={onRemoveTask}
               onUpdate={onUpdateTask}
+              onAssign={onAssignTask}
               onSelectForPomodoro={onSelectForPomodoro}
             />
           ))

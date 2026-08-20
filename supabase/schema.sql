@@ -8,10 +8,29 @@ create table if not exists public.tasks (
   estimated_pomodoros integer default 1 not null,
   completed_pomodoros integer default 0 not null,
   created_at bigint not null,
-  completed_at bigint
+  completed_at bigint,
+  team_id text,
+  assignee_id text,
+  assignee_name text,
+  assignee_email text,
+  assignee_avatar text,
+  assigned_by_id text,
+  assigned_by_name text,
+  assigned_at bigint
 );
 
+alter table public.tasks add column if not exists team_id text;
+alter table public.tasks add column if not exists assignee_id text;
+alter table public.tasks add column if not exists assignee_name text;
+alter table public.tasks add column if not exists assignee_email text;
+alter table public.tasks add column if not exists assignee_avatar text;
+alter table public.tasks add column if not exists assigned_by_id text;
+alter table public.tasks add column if not exists assigned_by_name text;
+alter table public.tasks add column if not exists assigned_at bigint;
+
 create index if not exists idx_tasks_user_id on public.tasks (user_id);
+create index if not exists idx_tasks_team_id on public.tasks (team_id);
+create index if not exists idx_tasks_assignee_id on public.tasks (assignee_id);
 create index if not exists idx_tasks_created_at on public.tasks (created_at desc);
 
 create table if not exists public.notes (

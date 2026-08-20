@@ -77,7 +77,9 @@ function getTasksSnapshot(): Task[] {
   return tasksCache || defaultInitialTasks;
 }
 
-export function useTasks(userId?: string | null) {
+export type AssignmentFilter = 'all' | 'my' | 'assigned_to_me' | 'team';
+
+export function useTasks(userId?: string | null, userEmail?: string | null) {
   const tasks = useSyncExternalStore(
     subscribeToTasks,
     getTasksSnapshot,
@@ -88,6 +90,8 @@ export function useTasks(userId?: string | null) {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
   const [selectedTag, setSelectedTag] = useState<string | 'all'>('all');
+  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>('all');
+  const [selectedAssignee, setSelectedAssignee] = useState<string | 'all'>('all');
 
   const saveTasks = useCallback((newTasks: Task[]) => {
     tasksCache = newTasks;
@@ -95,18 +99,27 @@ export function useTasks(userId?: string | null) {
     emitTasksChange();
   }, []);
 
-  const loadFromSupabase = useCallback(async (uid: string) => {
-    const remoteTasks = await fetchTasksFromSupabase(uid);
+  const loadFromSupabase = useCallback(async (uid: string, teamIds: string[] = [], uemail?: string | null) => {
+    const remoteTasks = await fetchTasksFromSupabase(uid, teamIds, uemail || userEmail);
     if (remoteTasks !== null && remoteTasks.length > 0) {
       saveTasks(remoteTasks);
     }
-  }, [saveTasks]);
+  }, [saveTasks, userEmail]);
 
   const addTask = (
     title: string,
     priority: TaskPriority = 'medium',
     tags: string[] = [],
-    estimatedPomodoros: number = 1
+    estimatedPomodoros: number = 1,
+    assignmentOptions?: {
+      teamId?: string;
+      assigneeId?: string;
+      assigneeName?: string;
+      assigneeEmail?: string;
+      assigneeAvatar?: string;
+      assignedById?: string;
+      assignedByName?: string;
+    }
   ): Task => {
     const newTask: Task = {
       id: generateId(),
@@ -117,6 +130,14 @@ export function useTasks(userId?: string | null) {
       estimatedPomodoros: Math.max(1, estimatedPomodoros),
       completedPomodoros: 0,
       createdAt: Date.now(),
+      teamId: assignmentOptions?.teamId,
+      assigneeId: assignmentOptions?.assigneeId,
+      assigneeName: assignmentOptions?.assigneeName,
+      assigneeEmail: assignmentOptions?.assigneeEmail,
+      assigneeAvatar: assignmentOptions?.assigneeAvatar,
+      assignedById: assignmentOptions?.assignedById,
+      assignedByName: assignmentOptions?.assignedByName,
+      assignedAt: assignmentOptions?.assigneeName || assignmentOptions?.assigneeId ? Date.now() : undefined,
     };
 
     const updated = [newTask, ...tasks];
@@ -128,6 +149,61 @@ export function useTasks(userId?: string | null) {
     }
 
     return newTask;
+  };
+
+  const assignTask = (
+    taskId: string,
+    assignee: { id?: string; name: string; email?: string; avatarUrl?: string } | null,
+    assignedBy?: { id: string; name: string }
+  ): Task | null => {
+    let assignedTask: Task | null = null;
+    const updated = tasks.map(t => {
+      if (t.id === taskId) {
+        if (assignee) {
+          assignedTask = {
+            ...t,
+            assigneeId: assignee.id,
+            assigneeName: assignee.name,
+            assigneeEmail: assignee.email,
+            assigneeAvatar: assignee.avatarUrl,
+            assignedById: assignedBy?.id,
+            assignedByName: assignedBy?.name,
+            assignedAt: Date.now(),
+          };
+        } else {
+          assignedTask = {
+            ...t,
+            assigneeId: undefined,
+            assigneeName: undefined,
+            assigneeEmail: undefined,
+            assigneeAvatar: undefined,
+            assignedById: undefined,
+            assignedByName: undefined,
+            assignedAt: undefined,
+          };
+        }
+        return assignedTask;
+      }
+      return t;
+    });
+
+    if (assignedTask) {
+      saveTasks(updated);
+      playAudioFeedback('success');
+      if (userId) {
+        updateTaskInSupabase(taskId, {
+          assigneeId: (assignedTask as Task).assigneeId,
+          assigneeName: (assignedTask as Task).assigneeName,
+          assigneeEmail: (assignedTask as Task).assigneeEmail,
+          assigneeAvatar: (assignedTask as Task).assigneeAvatar,
+          assignedById: (assignedTask as Task).assignedById,
+          assignedByName: (assignedTask as Task).assignedByName,
+          assignedAt: (assignedTask as Task).assignedAt,
+        }, userId);
+      }
+    }
+
+    return assignedTask;
   };
 
   const toggleTask = (id: string): Task | null => {
@@ -155,7 +231,6 @@ export function useTasks(userId?: string | null) {
           colors: ['#10b981', '#00ff66', '#ff79c6', '#88c0d0', '#ffe600']
         });
       } catch {
-        // Safe fallback
       }
     } else {
       playAudioFeedback('click');
@@ -251,21 +326,59 @@ export function useTasks(userId?: string | null) {
     return Array.from(set).sort();
   }, [tasks]);
 
+  const allAssignees = useMemo(() => {
+    const map = new Map<string, { id?: string; name: string; email?: string }>();
+    tasks.forEach(t => {
+      if (t.assigneeName) {
+        const key = t.assigneeId || t.assigneeEmail || t.assigneeName;
+        map.set(key, {
+          id: t.assigneeId,
+          name: t.assigneeName,
+          email: t.assigneeEmail,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [tasks]);
+
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       if (filter === 'active' && task.completed) return false;
       if (filter === 'completed' && !task.completed) return false;
       if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false;
       if (selectedTag !== 'all' && !task.tags.includes(selectedTag)) return false;
+
+      if (assignmentFilter === 'my') {
+        const isAssignedToMe = (userId && task.assigneeId === userId) ||
+          (userEmail && task.assigneeEmail && task.assigneeEmail.toLowerCase() === userEmail.toLowerCase());
+        const isNotAssigned = !task.assigneeId && !task.assigneeName;
+        if (!isAssignedToMe && !isNotAssigned) return false;
+      } else if (assignmentFilter === 'assigned_to_me') {
+        const isAssignedToMe = (userId && task.assigneeId === userId) ||
+          (userEmail && task.assigneeEmail && task.assigneeEmail.toLowerCase() === userEmail.toLowerCase());
+        if (!isAssignedToMe) return false;
+      } else if (assignmentFilter === 'team') {
+        if (!task.assigneeName && !task.teamId) return false;
+      }
+
+      if (selectedAssignee !== 'all') {
+        const matchesAssignee = task.assigneeId === selectedAssignee ||
+          task.assigneeEmail === selectedAssignee ||
+          task.assigneeName === selectedAssignee;
+        if (!matchesAssignee) return false;
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = task.title.toLowerCase().includes(q);
         const matchesTag = task.tags.some(tag => tag.toLowerCase().includes(q));
-        if (!matchesTitle && !matchesTag) return false;
+        const matchesAssigneeName = task.assigneeName?.toLowerCase().includes(q) || false;
+        const matchesAssignedByName = task.assignedByName?.toLowerCase().includes(q) || false;
+        if (!matchesTitle && !matchesTag && !matchesAssigneeName && !matchesAssignedByName) return false;
       }
       return true;
     });
-  }, [tasks, filter, priorityFilter, selectedTag, searchQuery]);
+  }, [tasks, filter, priorityFilter, selectedTag, assignmentFilter, selectedAssignee, searchQuery, userId, userEmail]);
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -274,6 +387,7 @@ export function useTasks(userId?: string | null) {
     const estimatedPomodoros = tasks.reduce((sum, t) => sum + (t.estimatedPomodoros || 0), 0);
     const completedPomodoros = tasks.reduce((sum, t) => sum + (t.completedPomodoros || 0), 0);
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const assignedCount = tasks.filter(t => Boolean(t.assigneeName || t.assigneeId)).length;
 
     return {
       total,
@@ -282,6 +396,7 @@ export function useTasks(userId?: string | null) {
       estimatedPomodoros,
       completedPomodoros,
       completionRate,
+      assignedCount,
     };
   }, [tasks]);
 
@@ -296,9 +411,15 @@ export function useTasks(userId?: string | null) {
     setPriorityFilter,
     selectedTag,
     setSelectedTag,
+    assignmentFilter,
+    setAssignmentFilter,
+    selectedAssignee,
+    setSelectedAssignee,
     allTags,
+    allAssignees,
     stats,
     addTask,
+    assignTask,
     toggleTask,
     removeTask,
     updateTask,
