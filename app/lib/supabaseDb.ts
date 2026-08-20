@@ -12,6 +12,14 @@ interface SupabaseTaskRow {
   completed_pomodoros: number;
   created_at: number;
   completed_at: number | null;
+  team_id: string | null;
+  assignee_id: string | null;
+  assignee_name: string | null;
+  assignee_email: string | null;
+  assignee_avatar: string | null;
+  assigned_by_id: string | null;
+  assigned_by_name: string | null;
+  assigned_at: number | null;
 }
 
 interface SupabaseNoteRow {
@@ -113,14 +121,26 @@ export async function searchProfilesInSupabase(query: string): Promise<UserProfi
   }
 }
 
-export async function fetchTasksFromSupabase(userId: string): Promise<Task[] | null> {
+export async function fetchTasksFromSupabase(
+  userId: string,
+  teamIds: string[] = [],
+  userEmail?: string | null
+): Promise<Task[] | null> {
   if (!isSupabaseConfigured || !supabase || !userId) return null;
 
   try {
+    const orConditions = [`user_id.eq.${userId}`, `assignee_id.eq.${userId}`];
+    if (userEmail && userEmail.trim()) {
+      orConditions.push(`assignee_email.ilike.${userEmail.trim()}`);
+    }
+    if (teamIds.length > 0) {
+      orConditions.push(`team_id.in.(${teamIds.join(",")})`);
+    }
+
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
-      .eq("user_id", userId)
+      .or(orConditions.join(","))
       .order("created_at", { ascending: false });
 
     if (error) return null;
@@ -135,6 +155,14 @@ export async function fetchTasksFromSupabase(userId: string): Promise<Task[] | n
       completedPomodoros: row.completed_pomodoros,
       createdAt: Number(row.created_at),
       completedAt: row.completed_at ? Number(row.completed_at) : undefined,
+      teamId: row.team_id || undefined,
+      assigneeId: row.assignee_id || undefined,
+      assigneeName: row.assignee_name || undefined,
+      assigneeEmail: row.assignee_email || undefined,
+      assigneeAvatar: row.assignee_avatar || undefined,
+      assignedById: row.assigned_by_id || undefined,
+      assignedByName: row.assigned_by_name || undefined,
+      assignedAt: row.assigned_at ? Number(row.assigned_at) : undefined,
     }));
   } catch {
     return null;
@@ -156,6 +184,14 @@ export async function createTaskInSupabase(task: Task, userId: string): Promise<
       completed_pomodoros: task.completedPomodoros,
       created_at: task.createdAt,
       completed_at: task.completedAt || null,
+      team_id: task.teamId || null,
+      assignee_id: task.assigneeId || null,
+      assignee_name: task.assigneeName || null,
+      assignee_email: task.assigneeEmail || null,
+      assignee_avatar: task.assigneeAvatar || null,
+      assigned_by_id: task.assignedById || null,
+      assigned_by_name: task.assignedByName || null,
+      assigned_at: task.assignedAt || null,
     });
 
     return !error;
@@ -180,12 +216,19 @@ export async function updateTaskInSupabase(
     if (updates.estimatedPomodoros !== undefined) payload.estimated_pomodoros = updates.estimatedPomodoros;
     if (updates.completedPomodoros !== undefined) payload.completed_pomodoros = updates.completedPomodoros;
     if (updates.completedAt !== undefined) payload.completed_at = updates.completedAt || null;
+    if (updates.teamId !== undefined) payload.team_id = updates.teamId || null;
+    if (updates.assigneeId !== undefined) payload.assignee_id = updates.assigneeId || null;
+    if (updates.assigneeName !== undefined) payload.assignee_name = updates.assigneeName || null;
+    if (updates.assigneeEmail !== undefined) payload.assignee_email = updates.assigneeEmail || null;
+    if (updates.assigneeAvatar !== undefined) payload.assignee_avatar = updates.assigneeAvatar || null;
+    if (updates.assignedById !== undefined) payload.assigned_by_id = updates.assignedById || null;
+    if (updates.assignedByName !== undefined) payload.assigned_by_name = updates.assignedByName || null;
+    if (updates.assignedAt !== undefined) payload.assigned_at = updates.assignedAt || null;
 
     const { error } = await supabase
       .from("tasks")
       .update(payload)
-      .eq("id", taskId)
-      .eq("user_id", userId);
+      .eq("id", taskId);
 
     return !error;
   } catch {
@@ -200,8 +243,7 @@ export async function deleteTaskInSupabase(taskId: string, userId: string): Prom
     const { error } = await supabase
       .from("tasks")
       .delete()
-      .eq("id", taskId)
-      .eq("user_id", userId);
+      .eq("id", taskId);
 
     return !error;
   } catch {
@@ -588,6 +630,14 @@ export async function bulkSyncToSupabase(
         completed_pomodoros: t.completedPomodoros,
         created_at: t.createdAt,
         completed_at: t.completedAt || null,
+        team_id: t.teamId || null,
+        assignee_id: t.assigneeId || null,
+        assignee_name: t.assigneeName || null,
+        assignee_email: t.assigneeEmail || null,
+        assignee_avatar: t.assigneeAvatar || null,
+        assigned_by_id: t.assignedById || null,
+        assigned_by_name: t.assignedByName || null,
+        assigned_at: t.assignedAt || null,
       }));
 
       await supabase.from("tasks").upsert(taskRows, { onConflict: "id" });

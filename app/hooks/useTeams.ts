@@ -389,6 +389,22 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     return teams.find(t => t.id === activeTeamId) || teams[0] || null;
   }, [teams, activeTeamId]);
 
+  const currentUserRole = useMemo<TeamRole | null>(() => {
+    if (!activeTeam) return null;
+    if (userId && activeTeam.ownerId === userId) return "owner";
+    const found = activeTeam.members.find(m =>
+      (userId && (m.id === userId || m.email === userEmail)) ||
+      (userEmail && m.email.toLowerCase() === userEmail.toLowerCase())
+    );
+    if (found) return found.role;
+    if (!userId) return "owner";
+    return "member";
+  }, [activeTeam, userId, userEmail]);
+
+  const isLeaderOrAdmin = useMemo(() => {
+    return currentUserRole === "owner" || currentUserRole === "admin";
+  }, [currentUserRole]);
+
   const filteredTeams = useMemo(() => {
     if (!searchQuery.trim()) return teams;
     const q = searchQuery.toLowerCase();
@@ -404,6 +420,8 @@ export function useTeams(userId?: string | null, userName?: string | null, userE
     filteredTeams,
     activeTeam,
     activeTeamId: activeTeam?.id || null,
+    currentUserRole,
+    isLeaderOrAdmin,
     setActiveTeamId,
     searchQuery,
     setSearchQuery,

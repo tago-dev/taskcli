@@ -43,9 +43,14 @@ export default function Home() {
     setPriorityFilter,
     selectedTag: taskSelectedTag,
     setSelectedTag: setTaskSelectedTag,
+    assignmentFilter,
+    setAssignmentFilter,
+    selectedAssignee,
+    setSelectedAssignee,
     allTags: taskTags,
     stats,
     addTask,
+    assignTask,
     toggleTask,
     removeTask,
     updateTask,
@@ -54,7 +59,7 @@ export default function Home() {
     clearAll: clearAllTasks,
     loadFromSupabase: loadTasksFromSupabase,
     mounted: tasksMounted,
-  } = useTasks(userId);
+  } = useTasks(userId, userEmail);
 
   const {
     notes,
@@ -75,6 +80,8 @@ export default function Home() {
   const {
     teams,
     activeTeam,
+    currentUserRole,
+    isLeaderOrAdmin,
     setActiveTeamId,
     createTeam,
     joinTeamByCode,
@@ -100,11 +107,11 @@ export default function Home() {
         updatedAt: Date.now(),
       });
       syncClerkUsers();
-      loadTasksFromSupabase(userId);
+      loadTasksFromSupabase(userId, teams.map(t => t.id), userEmail);
       loadNotesFromSupabase(userId);
       loadTeamsFromSupabase(userId, userEmail);
     }
-  }, [userId, userName, userEmail, userAvatar, syncClerkUsers, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase]);
+  }, [userId, userName, userEmail, userAvatar, syncClerkUsers, loadTasksFromSupabase, loadNotesFromSupabase, loadTeamsFromSupabase, teams]);
 
   const handleManualSync = async (): Promise<boolean> => {
     if (!userId || !isSupabaseConfigured) return false;
@@ -128,6 +135,11 @@ export default function Home() {
     teams,
     activeTeam,
     isLoggedIn: Boolean(userId),
+    userId,
+    userName,
+    userEmail,
+    currentUserRole,
+    isLeaderOrAdmin,
     createTeam,
     joinTeamByCode,
     searchProfiles,
@@ -136,6 +148,7 @@ export default function Home() {
     removeTeamMember: removeMember,
     switchTeam: setActiveTeamId,
     addTask,
+    assignTask,
     toggleTask,
     removeTask,
     clearCompleted,
@@ -157,7 +170,6 @@ export default function Home() {
     changeTheme,
     cycleTheme,
   });
-
 
   const activeTask = tasks.find(t => t.id === pomodoro.activeTaskId) || null;
 
@@ -234,10 +246,21 @@ export default function Home() {
                 selectedTag={taskSelectedTag}
                 setSelectedTag={setTaskSelectedTag}
                 allTags={taskTags}
+                teamMembers={activeTeam?.members || []}
+                isLeaderOrAdmin={isLeaderOrAdmin}
+                currentUserId={userId}
+                currentUserEmail={userEmail}
+                currentUserName={userName}
+                activeTeamId={activeTeam?.id || null}
+                assignmentFilter={assignmentFilter}
+                setAssignmentFilter={setAssignmentFilter}
+                selectedAssignee={selectedAssignee}
+                setSelectedAssignee={setSelectedAssignee}
                 activePomodoroTaskId={pomodoro.activeTaskId}
-                onAddTask={(title, priority, tags, pomos) =>
-                  addTask(title, priority, tags, pomos)
+                onAddTask={(title, priority, tags, pomos, options) =>
+                  addTask(title, priority, tags, pomos, options)
                 }
+                onAssignTask={assignTask}
                 onToggleTask={toggleTask}
                 onRemoveTask={removeTask}
                 onUpdateTask={updateTask}
@@ -300,10 +323,21 @@ export default function Home() {
               selectedTag={taskSelectedTag}
               setSelectedTag={setTaskSelectedTag}
               allTags={taskTags}
+              teamMembers={activeTeam?.members || []}
+              isLeaderOrAdmin={isLeaderOrAdmin}
+              currentUserId={userId}
+              currentUserEmail={userEmail}
+              currentUserName={userName}
+              activeTeamId={activeTeam?.id || null}
+              assignmentFilter={assignmentFilter}
+              setAssignmentFilter={setAssignmentFilter}
+              selectedAssignee={selectedAssignee}
+              setSelectedAssignee={setSelectedAssignee}
               activePomodoroTaskId={pomodoro.activeTaskId}
-              onAddTask={(title, priority, tags, pomos) =>
-                addTask(title, priority, tags, pomos)
+              onAddTask={(title, priority, tags, pomos, options) =>
+                addTask(title, priority, tags, pomos, options)
               }
+              onAssignTask={assignTask}
               onToggleTask={toggleTask}
               onRemoveTask={removeTask}
               onUpdateTask={updateTask}
@@ -387,7 +421,12 @@ export default function Home() {
             <TeamSection
               teams={teams}
               activeTeam={activeTeam}
+              tasks={tasks}
               isLoggedIn={Boolean(userId)}
+              currentUserRole={currentUserRole}
+              isLeaderOrAdmin={isLeaderOrAdmin}
+              currentUserId={userId}
+              currentUserName={userName}
               onSelectTeam={setActiveTeamId}
               onCreateTeam={createTeam}
               onUpdateTeam={updateTeam}
@@ -395,6 +434,11 @@ export default function Home() {
               onAddMember={addMember}
               onRemoveMember={removeMember}
               onUpdateMemberRole={updateMemberRole}
+              onAssignTask={assignTask}
+              onAddTask={(title, priority, tags, pomos, options) =>
+                addTask(title, priority, tags, pomos, options)
+              }
+              onToggleTask={toggleTask}
               onSearchProfiles={searchProfiles}
               onSyncClerkUsers={syncClerkUsers}
               onJoinTeamByCode={joinTeamByCode}

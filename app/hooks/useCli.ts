@@ -10,6 +10,11 @@ interface UseCliProps {
   teams?: Team[];
   activeTeam?: Team | null;
   isLoggedIn?: boolean;
+  userId?: string | null;
+  userName?: string | null;
+  userEmail?: string | null;
+  currentUserRole?: TeamRole | null;
+  isLeaderOrAdmin?: boolean;
   createTeam?: (name: string, description: string) => Team;
   joinTeamByCode?: (code: string) => Promise<{ success: boolean; message: string; team?: Team }>;
   searchProfiles?: (query: string) => Promise<UserProfile[]>;
@@ -17,7 +22,26 @@ interface UseCliProps {
   addTeamMember?: (teamId: string, name: string, email: string, role: TeamRole) => TeamMember | null;
   removeTeamMember?: (teamId: string, memberId: string) => boolean;
   switchTeam?: (teamId: string) => void;
-  addTask: (title: string, priority?: TaskPriority, tags?: string[], estimatedPomodoros?: number) => Task;
+  addTask: (
+    title: string,
+    priority?: TaskPriority,
+    tags?: string[],
+    estimatedPomodoros?: number,
+    assignmentOptions?: {
+      teamId?: string;
+      assigneeId?: string;
+      assigneeName?: string;
+      assigneeEmail?: string;
+      assigneeAvatar?: string;
+      assignedById?: string;
+      assignedByName?: string;
+    }
+  ) => Task;
+  assignTask?: (
+    taskId: string,
+    assignee: { id?: string; name: string; email?: string; avatarUrl?: string } | null,
+    assignedBy?: { id: string; name: string }
+  ) => Task | null;
   toggleTask: (id: string) => Task | null;
   removeTask: (id: string) => boolean;
   clearCompleted: () => number;
@@ -46,6 +70,11 @@ export function useCli({
   teams = [],
   activeTeam,
   isLoggedIn = false,
+  userId,
+  userName,
+  userEmail,
+  currentUserRole,
+  isLeaderOrAdmin = false,
   createTeam,
   joinTeamByCode,
   searchProfiles,
@@ -54,6 +83,7 @@ export function useCli({
   removeTeamMember,
   switchTeam,
   addTask,
+  assignTask,
   toggleTask,
   removeTask,
   clearCompleted,
@@ -64,7 +94,6 @@ export function useCli({
   pomodoro,
   changeTheme,
   cycleTheme,
-
 }: UseCliProps) {
   const [history, setHistory] = useState<CommandHistoryItem[]>([
     {
@@ -128,6 +157,16 @@ export function useCli({
     return partial ? partial.id : null;
   };
 
+  const findTeamMember = (query: string): TeamMember | null => {
+    if (!activeTeam) return null;
+    const cleanQuery = query.trim().toLowerCase().replace(/^@/, '');
+    return activeTeam.members.find(
+      m => m.id.toLowerCase() === cleanQuery ||
+           m.name.toLowerCase().includes(cleanQuery) ||
+           m.email.toLowerCase().includes(cleanQuery)
+    ) || null;
+  };
+
   const executeCommand = async (rawInput: string) => {
     const input = rawInput.trim();
     if (!input) return;
@@ -144,21 +183,22 @@ export function useCli({
       case '?': {
         addHistoryEntry(input, [
           "COMANDOS DISPONÍVEIS:",
-          "  add <texto> [-p high|med|low] [#tag] [~2]  - Adiciona nova tarefa",
-          "  done <id|número>                           - Marca/desmarca tarefa como concluída",
-          "  rm <id|número>                             - Remove uma tarefa",
-          "  list [all|active|done]                     - Lista as tarefas",
+          "  add <texto> [@membro] [-p high|med|low] [#tag] [~2] - Adiciona/atribui tarefa",
+          "  assign <id|núm> <membro>                  - Atribui tarefa da equipe a um membro",
+          "  unassign <id|núm>                          - Remove a atribuição de uma tarefa",
+          "  done <id|núm>                              - Marca/desmarca tarefa como concluída",
+          "  rm <id|núm>                                - Remove uma tarefa",
+          "  list [all|active|done|my|team]             - Lista as tarefas com filtros",
           "  note <título> | <conteúdo>                 - Cria uma anotação",
           "  notes                                      - Lista anotações salvas",
-          "  rmnote <id|número>                         - Remove uma anotação",
-          "  team [list|create|join|switch|info|member] - Gerencia equipes e membros",
+          "  rmnote <id|núm>                            - Remove uma anotação",
+          "  team [list|create|join|switch|info|tasks]  - Gerencia equipes, membros e tarefas",
           "  user [search|sync]                         - Pesquisa e sincroniza usuários do Clerk",
           "  pomodoro [start|pause|reset|25|50|5|15]    - Controla o timer Pomodoro",
-          "  theme [dark|light|matrix|dracula|cyberpunk|nord] - Altera o tema",
+          "  theme [dark|light|matrix|dracula|...]      - Altera o tema",
           "  sync                                       - Sincroniza com Supabase",
           "  stats                                      - Mostra resumo de produtividade",
           "  clear / cls                                - Limpa o histórico do terminal",
-          "  clear tasks / clear completed              - Remove tarefas concluídas ou todas",
         ], 'info');
         break;
       }
@@ -179,13 +219,14 @@ export function useCli({
 
       case 'add': {
         if (!rest) {
-          addHistoryEntry(input, ["Erro: Informe o título da tarefa. Ex: `add Finalizar relatório -p high #trabalho`"], 'error');
+          addHistoryEntry(input, ["Erro: Informe o título da tarefa. Ex: `add Finalizar deploy @joao -p high ~2`"], 'error');
           return;
         }
 
         let priority: TaskPriority = 'medium';
         const tags: string[] = [];
         let pomodoros = 1;
+        let assignedMember: TeamMember | null = null;
 
         const priorityMatch = rest.match(/-p\s+(high|med|medium|low)/i);
         if (priorityMatch) {
@@ -205,10 +246,16 @@ export function useCli({
           pomodoros = parseInt(pomoMatch[1], 10) || 1;
         }
 
+        const memberMatch = rest.match(/@([\w.-]+)/);
+        if (memberMatch && activeTeam) {
+          assignedMember = findTeamMember(memberMatch[1]);
+        }
+
         const cleanTitle = rest
           .replace(/-p\s+(high|med|medium|low)/gi, '')
           .replace(/#([\w-]+)/g, '')
           .replace(/~(\d+)/g, '')
+          .replace(/@([\w.-]+)/g, '')
           .trim();
 
         if (!cleanTitle) {
@@ -216,11 +263,96 @@ export function useCli({
           return;
         }
 
-        const newTask = addTask(cleanTitle, priority, tags, pomodoros);
+        const assignmentOptions = assignedMember ? {
+          teamId: activeTeam?.id,
+          assigneeId: assignedMember.id,
+          assigneeName: assignedMember.name,
+          assigneeEmail: assignedMember.email,
+          assigneeAvatar: assignedMember.avatarUrl,
+          assignedById: userId || undefined,
+          assignedByName: userName || 'Líder',
+        } : (activeTeam ? { teamId: activeTeam.id } : undefined);
+
+        const newTask = addTask(cleanTitle, priority, tags, pomodoros, assignmentOptions);
+        const assignStr = newTask.assigneeName ? ` | Atribuída a: ${newTask.assigneeName}` : '';
+
         addHistoryEntry(input, [
           `✓ Tarefa adicionada: [${newTask.id}] ${newTask.title}`,
-          `  Prioridade: ${newTask.priority.toUpperCase()} | Tags: ${newTask.tags.join(', ') || 'nenhuma'} | Pomodoros: ${newTask.estimatedPomodoros}`,
+          `  Prioridade: ${newTask.priority.toUpperCase()} | Tags: ${newTask.tags.join(', ') || 'nenhuma'} | Pomodoros: ${newTask.estimatedPomodoros}${assignStr}`,
         ], 'success');
+        break;
+      }
+
+      case 'assign': {
+        if (!activeTeam) {
+          addHistoryEntry(input, ["Erro: Selecione ou crie uma equipe antes de atribuir tarefas."], 'error');
+          return;
+        }
+
+        if (!isLeaderOrAdmin) {
+          addHistoryEntry(input, ["Erro: Apenas o Líder ou Administrador pode atribuir tarefas para a equipe."], 'error');
+          return;
+        }
+
+        if (args.length < 2) {
+          addHistoryEntry(input, ["Uso: assign <id|número> <nome ou email do membro>"], 'error');
+          return;
+        }
+
+        const taskId = resolveTaskId(args[0]);
+        if (!taskId) {
+          addHistoryEntry(input, [`Erro: Tarefa não encontrada: '${args[0]}'`], 'error');
+          return;
+        }
+
+        const memberQuery = args.slice(1).join(' ');
+        const member = findTeamMember(memberQuery);
+        if (!member) {
+          addHistoryEntry(input, [
+            `Erro: Membro '${memberQuery}' não encontrado na equipe "${activeTeam.name}".`,
+            `Membros disponíveis: ${activeTeam.members.map(m => m.name).join(', ')}`
+          ], 'error');
+          return;
+        }
+
+        if (assignTask) {
+          const assigned = assignTask(taskId, member, {
+            id: userId || 'leader',
+            name: userName || 'Líder',
+          });
+          if (assigned) {
+            addHistoryEntry(input, [
+              `✓ Tarefa [${assigned.id}] "${assigned.title}" atribuída para:`,
+              `  👤 ${member.name} (${member.email}) [${member.role.toUpperCase()}]`,
+            ], 'success');
+          }
+        }
+        break;
+      }
+
+      case 'unassign': {
+        if (!isLeaderOrAdmin) {
+          addHistoryEntry(input, ["Erro: Apenas o Líder ou Administrador pode remover atribuições."], 'error');
+          return;
+        }
+
+        if (!args[0]) {
+          addHistoryEntry(input, ["Uso: unassign <id|número>"], 'error');
+          return;
+        }
+
+        const taskId = resolveTaskId(args[0]);
+        if (!taskId) {
+          addHistoryEntry(input, [`Erro: Tarefa não encontrada: '${args[0]}'`], 'error');
+          return;
+        }
+
+        if (assignTask) {
+          const updated = assignTask(taskId, null);
+          if (updated) {
+            addHistoryEntry(input, [`✓ Atribuição removida da tarefa [${updated.id}] "${updated.title}".`], 'success');
+          }
+        }
         break;
       }
 
@@ -276,6 +408,10 @@ export function useCli({
           targetList = tasks.filter(t => !t.completed);
         } else if (filterType === 'done' || filterType === 'completed') {
           targetList = tasks.filter(t => t.completed);
+        } else if (filterType === 'team') {
+          targetList = tasks.filter(t => Boolean(t.assigneeName || t.teamId));
+        } else if (filterType === 'my') {
+          targetList = tasks.filter(t => (userId && t.assigneeId === userId) || (userEmail && t.assigneeEmail === userEmail) || (!t.assigneeName && !t.assigneeId));
         }
 
         if (targetList.length === 0) {
@@ -292,7 +428,8 @@ export function useCli({
           const prio = `[${t.priority[0].toUpperCase()}]`;
           const tagsStr = t.tags.length > 0 ? `(${t.tags.map(tag => `#${tag}`).join(' ')})` : '';
           const pomoStr = `🍅 ${t.completedPomodoros}/${t.estimatedPomodoros}`;
-          lines.push(`${i + 1}. ${check} ${prio} [${t.id}] ${t.title} ${tagsStr} ${pomoStr}`);
+          const assignStr = t.assigneeName ? `👤 @${t.assigneeName}` : '';
+          lines.push(`${i + 1}. ${check} ${prio} [${t.id}] ${t.title} ${tagsStr} ${pomoStr} ${assignStr}`);
         });
         addHistoryEntry(input, lines, 'info');
         break;
@@ -349,22 +486,24 @@ export function useCli({
           addHistoryEntry(input, [`Erro: Nota não encontrada: '${rest}'`], 'error');
           return;
         }
-        removeNote(noteId);
-        addHistoryEntry(input, [`✓ Nota [${noteId}] removida.`], 'success');
+        const removed = removeNote(noteId);
+        if (removed) {
+          addHistoryEntry(input, [`✓ Nota [${noteId}] removida.`], 'success');
+        }
         break;
       }
 
       case 'sync': {
-        if (onSync) {
-          addHistoryEntry(input, ["Sincronizando tarefas e notas com Supabase..."], 'info');
-          const ok = await onSync();
-          if (ok) {
-            addHistoryEntry(input, ["✓ Sincronização com Supabase concluída com sucesso."], 'success');
-          } else {
-            addHistoryEntry(input, ["Aviso: Verifique se o usuário está autenticado e as chaves do Supabase configuradas."], 'warn');
-          }
+        if (!onSync) {
+          addHistoryEntry(input, ["Sincronização em nuvem não disponível."], 'warn');
+          return;
+        }
+        addHistoryEntry(input, ["Iniciando sincronização com o Supabase..."], 'info');
+        const ok = await onSync();
+        if (ok) {
+          addHistoryEntry(input, ["✓ Dados sincronizados com o Supabase com sucesso!"], 'success');
         } else {
-          addHistoryEntry(input, ["Sincronização indisponível."], 'warn');
+          addHistoryEntry(input, ["Erro: Não foi possível sincronizar com o Supabase."], 'error');
         }
         break;
       }
@@ -372,30 +511,22 @@ export function useCli({
       case 'pomodoro':
       case 'pomo': {
         const sub = args[0]?.toLowerCase();
-        if (!sub || sub === 'toggle') {
-          if (pomodoro.isRunning) {
-            pomodoro.pause();
-            addHistoryEntry(input, ["Pomodoro pausado."], 'warn');
-          } else {
-            pomodoro.start();
-            addHistoryEntry(input, ["Pomodoro iniciado! Modo: " + pomodoro.mode.toUpperCase()], 'success');
-          }
-        } else if (sub === 'start') {
+        if (!sub || sub === 'start') {
           pomodoro.start();
-          addHistoryEntry(input, ["Pomodoro iniciado!"], 'success');
+          addHistoryEntry(input, ["Ciclo Pomodoro iniciado."], 'success');
         } else if (sub === 'pause' || sub === 'stop') {
           pomodoro.pause();
-          addHistoryEntry(input, ["Pomodoro pausado."], 'warn');
+          addHistoryEntry(input, ["Ciclo Pomodoro pausado."], 'warn');
         } else if (sub === 'reset') {
           pomodoro.reset();
-          addHistoryEntry(input, ["Pomodoro resetado."], 'info');
-        } else if (sub === 'short' || sub === 'shortbreak') {
+          addHistoryEntry(input, ["Timer Pomodoro reiniciado."], 'info');
+        } else if (sub === 'short' || sub === '5') {
           pomodoro.switchMode('shortBreak');
           addHistoryEntry(input, ["Modo alterado para Pausa Curta (5 min)."], 'info');
-        } else if (sub === 'long' || sub === 'longbreak') {
+        } else if (sub === 'long' || sub === '15') {
           pomodoro.switchMode('longBreak');
           addHistoryEntry(input, ["Modo alterado para Pausa Longa (15 min)."], 'info');
-        } else if (sub === 'focus') {
+        } else if (sub === 'focus' || sub === '25') {
           pomodoro.switchMode('focus');
           addHistoryEntry(input, ["Modo alterado para Foco (25 min)."], 'info');
         } else if (!isNaN(parseInt(sub, 10))) {
@@ -499,10 +630,52 @@ export function useCli({
               `EQUIPE: ${activeTeam.name}`,
               `Código: ${activeTeam.code}`,
               `Descrição: ${activeTeam.description || 'Sem descrição'}`,
+              `Seu papel: ${(currentUserRole || 'member').toUpperCase()}`,
               `Membros (${activeTeam.members.length}):`,
             ];
             activeTeam.members.forEach(m => {
               lines.push(`  - ${m.name} (${m.email}) [${m.role.toUpperCase()}]`);
+            });
+            addHistoryEntry(input, lines, 'info');
+          }
+        } else if (sub === 'tasks') {
+          if (!activeTeam) {
+            addHistoryEntry(input, ["Nenhuma equipe ativa selecionada."], 'warn');
+          } else {
+            const teamTasks = tasks.filter(t => t.teamId === activeTeam.id || Boolean(t.assigneeName));
+            if (teamTasks.length === 0) {
+              addHistoryEntry(input, [`Nenhuma tarefa vinculada à equipe "${activeTeam.name}".`], 'info');
+            } else {
+              const lines = [
+                `TAREFAS DA EQUIPE "${activeTeam.name}" (${teamTasks.length}):`,
+                "--------------------------------------------------",
+              ];
+              teamTasks.forEach((t, i) => {
+                const check = t.completed ? "[✓]" : "[ ]";
+                const prio = `[${t.priority[0].toUpperCase()}]`;
+                const assignee = t.assigneeName ? `👤 @${t.assigneeName}` : '(Não atribuída)';
+                lines.push(`${i + 1}. ${check} ${prio} [${t.id}] ${t.title} -> ${assignee}`);
+              });
+              addHistoryEntry(input, lines, 'info');
+            }
+          }
+        } else if (sub === 'mytasks') {
+          const myAssigned = tasks.filter(t =>
+            (userId && t.assigneeId === userId) ||
+            (userEmail && t.assigneeEmail?.toLowerCase() === userEmail.toLowerCase())
+          );
+          if (myAssigned.length === 0) {
+            addHistoryEntry(input, ["Nenhuma tarefa atribuída a você no momento."], 'info');
+          } else {
+            const lines = [
+              `SUAS TAREFAS ATRIBUÍDAS (${myAssigned.length}):`,
+              "--------------------------------------------------",
+            ];
+            myAssigned.forEach((t, i) => {
+              const check = t.completed ? "[✓]" : "[ ]";
+              const prio = `[${t.priority[0].toUpperCase()}]`;
+              const by = t.assignedByName ? `(por ${t.assignedByName})` : '';
+              lines.push(`${i + 1}. ${check} ${prio} [${t.id}] ${t.title} ${by}`);
             });
             addHistoryEntry(input, lines, 'info');
           }
@@ -554,6 +727,8 @@ export function useCli({
             "  team join <código>           - Entra em uma equipe existente",
             "  team switch <nome|código>    - Alterna a equipe ativa",
             "  team info                    - Detalhes da equipe ativa",
+            "  team tasks                   - Lista tarefas da equipe",
+            "  team mytasks                 - Lista tarefas atribuídas a você",
             "  team member add <nome> <email> [role] - Adiciona membro",
             "  team member rm <email|id>    - Remove membro",
           ], 'info');
@@ -603,11 +778,13 @@ export function useCli({
         const done = tasks.filter(t => t.completed).length;
         const pending = total - done;
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        const assigned = tasks.filter(t => Boolean(t.assigneeName || t.assigneeId)).length;
         addHistoryEntry(input, [
           "ESTATÍSTICAS DO TASKCLI:",
           `  Total de Tarefas: ${total}`,
           `  Concluídas: ${done} (${pct}%)`,
           `  Pendentes: ${pending}`,
+          `  Tarefas com Responsável: ${assigned}`,
           `  Sessões de Pomodoro Concluídas: ${pomodoro.sessionsCompleted}`,
           `  Total de Notas: ${notes.length}`,
         ], 'info');

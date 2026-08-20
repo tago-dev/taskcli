@@ -7,30 +7,45 @@ import {
   Tag,
   Timer,
   Trash2,
+  User,
+  UserCheck,
+  UserMinus,
+  UserPlus,
   X,
 } from "lucide-react";
 import React, { useState } from "react";
-import { Task, TaskPriority } from "../types";
+import { Task, TaskPriority, TeamMember } from "../types";
 
 interface TaskItemProps {
   task: Task;
   isActiveForPomodoro: boolean;
+  teamMembers?: TeamMember[];
+  isLeaderOrAdmin?: boolean;
+  currentUserId?: string | null;
+  currentUserEmail?: string | null;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Task>) => void;
+  onAssign?: (taskId: string, member: TeamMember | null) => void;
   onSelectForPomodoro: (id: string) => void;
 }
 
 export function TaskItem({
   task,
   isActiveForPomodoro,
+  teamMembers = [],
+  isLeaderOrAdmin = false,
+  currentUserId,
+  currentUserEmail,
   onToggle,
   onRemove,
   onUpdate,
+  onAssign,
   onSelectForPomodoro,
 }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +53,11 @@ export function TaskItem({
     onUpdate(task.id, { title: editedTitle.trim() });
     setIsEditing(false);
   };
+
+  const isAssignedToMe = Boolean(
+    (currentUserId && task.assigneeId === currentUserId) ||
+    (currentUserEmail && task.assigneeEmail?.toLowerCase() === currentUserEmail.toLowerCase())
+  );
 
   const getPriorityBadge = (prio: TaskPriority) => {
     switch (prio) {
@@ -131,6 +151,31 @@ export function TaskItem({
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {getPriorityBadge(task.priority)}
 
+              {task.assigneeName && (
+                <span
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md font-mono text-xs border ${
+                    isAssignedToMe
+                      ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/30 font-semibold"
+                      : "bg-[var(--bg-card)] text-[var(--text-main)] border-[var(--border-color)]"
+                  }`}
+                  title={
+                    task.assignedByName
+                      ? `Atribuída a ${task.assigneeName} por ${task.assignedByName}`
+                      : `Atribuída a ${task.assigneeName}`
+                  }
+                >
+                  <User className="w-3 h-3 text-[var(--accent)]" />
+                  <span>
+                    {isAssignedToMe ? "Você" : task.assigneeName}
+                  </span>
+                  {task.assignedByName && (
+                    <span className="text-[10px] text-[var(--text-dim)] hidden sm:inline">
+                      (por {task.assignedByName})
+                    </span>
+                  )}
+                </span>
+              )}
+
               {task.tags.map(tag => (
                 <span
                   key={tag}
@@ -157,7 +202,62 @@ export function TaskItem({
         )}
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity relative">
+        {isLeaderOrAdmin && teamMembers.length > 0 && onAssign && (
+          <div className="relative">
+            <button
+              onClick={() => setShowAssignDropdown(!showAssignDropdown)}
+              className={`p-2 rounded-lg transition-colors ${
+                task.assigneeName
+                  ? "text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                  : "text-[var(--text-dim)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card)]"
+              }`}
+              title={task.assigneeName ? `Reatribuir tarefa (atual: ${task.assigneeName})` : "Atribuir a membro da equipe"}
+            >
+              {task.assigneeName ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+            </button>
+
+            {showAssignDropdown && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded-xl shadow-xl z-20 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                <div className="text-[11px] font-mono font-bold text-[var(--text-dim)] uppercase px-2 py-1 border-b border-[var(--border-color)]">
+                  Atribuir Tarefa
+                </div>
+                {task.assigneeName && (
+                  <button
+                    onClick={() => {
+                      onAssign(task.id, null);
+                      setShowAssignDropdown(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-[var(--danger)] hover:bg-[var(--danger-soft)] rounded-lg text-left transition-colors"
+                  >
+                    <UserMinus className="w-3.5 h-3.5" />
+                    <span>Remover atribuição</span>
+                  </button>
+                )}
+                {teamMembers.map(member => (
+                  <button
+                    key={member.id}
+                    onClick={() => {
+                      onAssign(task.id, member);
+                      setShowAssignDropdown(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-mono rounded-lg text-left transition-colors ${
+                      task.assigneeId === member.id || task.assigneeEmail === member.email
+                        ? "bg-[var(--accent-soft)] text-[var(--accent)] font-bold"
+                        : "text-[var(--text-main)] hover:bg-[var(--bg-card)]"
+                    }`}
+                  >
+                    <span className="truncate">{member.name}</span>
+                    <span className="text-[10px] text-[var(--text-dim)] uppercase ml-2 shrink-0">
+                      {member.role === "owner" ? "Líder" : member.role === "admin" ? "Admin" : "Membro"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => onSelectForPomodoro(task.id)}
           className={`p-2 rounded-lg transition-colors ${
