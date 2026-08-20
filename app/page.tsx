@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { CommandPalette } from "./components/CommandPalette";
 import { Header } from "./components/Header";
+import { KanbanBoard } from "./components/KanbanBoard";
 import { NotesSection } from "./components/NotesSection";
 import { PomodoroTimer } from "./components/PomodoroTimer";
 import { TaskList } from "./components/TaskList";
@@ -52,6 +53,7 @@ export default function Home() {
     addTask,
     assignTask,
     toggleTask,
+    updateTaskStatus,
     removeTask,
     updateTask,
     incrementPomodoro,
@@ -150,6 +152,7 @@ export default function Home() {
     addTask,
     assignTask,
     toggleTask,
+    updateTaskStatus,
     removeTask,
     clearCompleted,
     clearAllTasks,
@@ -345,6 +348,31 @@ export default function Home() {
                 pomodoro.setActiveTaskId(pomodoro.activeTaskId === id ? null : id)
               }
               onClearCompleted={clearCompleted}
+            />
+          </div>
+        )}
+
+        {currentTab === "kanban" && (
+          <div className="max-w-7xl mx-auto space-y-8">
+            <KanbanBoard
+              tasks={tasks}
+              teamMembers={activeTeam?.members || []}
+              activeTeam={activeTeam}
+              isLeaderOrAdmin={isLeaderOrAdmin}
+              currentUserId={userId}
+              currentUserEmail={userEmail}
+              currentUserName={userName}
+              activePomodoroTaskId={pomodoro.activeTaskId}
+              onUpdateTaskStatus={updateTaskStatus}
+              onAssignTask={assignTask}
+              onAddTask={(title, priority, tags, pomos, options) =>
+                addTask(title, priority, tags, pomos, options)
+              }
+              onToggleTask={toggleTask}
+              onRemoveTask={removeTask}
+              onSelectForPomodoro={id =>
+                pomodoro.setActiveTaskId(pomodoro.activeTaskId === id ? null : id)
+              }
             />
           </div>
         )}

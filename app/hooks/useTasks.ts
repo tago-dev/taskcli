@@ -10,13 +10,14 @@ import {
   updateTaskInSupabase,
 } from "../lib/supabaseDb";
 import { generateId, playAudioFeedback } from "../lib/utils";
-import { Task, TaskPriority } from "../types";
+import { Task, TaskPriority, TaskStatus } from "../types";
 
 const defaultInitialTasks: Task[] = [
   {
     id: "t1",
     title: "Explorar comandos do TaskCli (digite `help` no terminal)",
     completed: false,
+    status: "todo",
     priority: "high",
     tags: ["taskcli", "guia"],
     estimatedPomodoros: 1,
@@ -27,6 +28,7 @@ const defaultInitialTasks: Task[] = [
     id: "t2",
     title: "Iniciar um ciclo Pomodoro para manter o foco",
     completed: false,
+    status: "todo",
     priority: "medium",
     tags: ["foco", "pomodoro"],
     estimatedPomodoros: 2,
@@ -37,6 +39,7 @@ const defaultInitialTasks: Task[] = [
     id: "t3",
     title: "Personalizar o tema da interface (digite `theme matrix`)",
     completed: false,
+    status: "todo",
     priority: "low",
     tags: ["customizacao"],
     estimatedPomodoros: 1,
@@ -112,6 +115,7 @@ export function useTasks(userId?: string | null, userEmail?: string | null) {
     tags: string[] = [],
     estimatedPomodoros: number = 1,
     assignmentOptions?: {
+      status?: TaskStatus;
       teamId?: string;
       assigneeId?: string;
       assigneeName?: string;
@@ -124,7 +128,8 @@ export function useTasks(userId?: string | null, userEmail?: string | null) {
     const newTask: Task = {
       id: generateId(),
       title: title.trim(),
-      completed: false,
+      completed: assignmentOptions?.status === 'done',
+      status: assignmentOptions?.status || 'todo',
       priority,
       tags: tags.map(t => t.toLowerCase().trim()).filter(Boolean),
       estimatedPomodoros: Math.max(1, estimatedPomodoros),
@@ -211,9 +216,11 @@ export function useTasks(userId?: string | null, userEmail?: string | null) {
     const updated = tasks.map(t => {
       if (t.id === id) {
         const nextCompleted = !t.completed;
+        const nextStatus: TaskStatus = nextCompleted ? 'done' : (t.completedPomodoros > 0 ? 'in_progress' : 'todo');
         toggledTask = {
           ...t,
           completed: nextCompleted,
+          status: nextStatus,
           completedAt: nextCompleted ? Date.now() : undefined,
         };
         return toggledTask;
@@ -240,10 +247,56 @@ export function useTasks(userId?: string | null, userEmail?: string | null) {
 
     if (userId && toggledTask) {
       const t = toggledTask as Task;
-      updateTaskInSupabase(id, { completed: t.completed, completedAt: t.completedAt }, userId);
+      updateTaskInSupabase(id, { completed: t.completed, status: t.status, completedAt: t.completedAt }, userId);
     }
 
     return toggledTask;
+  };
+
+  const updateTaskStatus = (id: string, status: TaskStatus): Task | null => {
+    let modifiedTask: Task | null = null;
+    const isDone = status === 'done';
+    const updated = tasks.map(t => {
+      if (t.id === id) {
+        modifiedTask = {
+          ...t,
+          status,
+          completed: isDone,
+          completedAt: isDone ? (t.completedAt || Date.now()) : undefined,
+        };
+        return modifiedTask;
+      }
+      return t;
+    });
+
+    if (modifiedTask) {
+      saveTasks(updated);
+      if (isDone) {
+        playAudioFeedback('success');
+        try {
+          confetti({
+            particleCount: 50,
+            spread: 60,
+            origin: { y: 0.8 },
+            colors: ['#10b981', '#00ff66', '#ff79c6', '#88c0d0', '#ffe600']
+          });
+        } catch {
+        }
+      } else {
+        playAudioFeedback('click');
+      }
+
+      if (userId) {
+        const t = modifiedTask as Task;
+        updateTaskInSupabase(id, {
+          status: t.status,
+          completed: t.completed,
+          completedAt: t.completedAt,
+        }, userId);
+      }
+    }
+
+    return modifiedTask;
   };
 
   const removeTask = (id: string): boolean => {
@@ -421,6 +474,7 @@ export function useTasks(userId?: string | null, userEmail?: string | null) {
     addTask,
     assignTask,
     toggleTask,
+    updateTaskStatus,
     removeTask,
     updateTask,
     incrementPomodoro,

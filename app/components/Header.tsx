@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Cloud,
+  Columns3,
   Command,
   FileText,
   HardDrive,
@@ -122,6 +123,17 @@ export function Header({
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Tarefas</span>
+          </button>
+          <button
+            onClick={() => setTab("kanban")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+              currentTab === "kanban"
+                ? "bg-[var(--accent)] text-[var(--accent-text)] font-semibold shadow-xs"
+                : "text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card)]"
+            }`}
+          >
+            <Columns3 className="w-4 h-4" />
+            <span>Kanban</span>
           </button>
           <button
             onClick={() => setTab("notes")}

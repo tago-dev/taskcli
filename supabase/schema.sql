@@ -16,7 +16,8 @@ create table if not exists public.tasks (
   assignee_avatar text,
   assigned_by_id text,
   assigned_by_name text,
-  assigned_at bigint
+  assigned_at bigint,
+  status text default 'todo' check (status in ('todo', 'in_progress', 'done'))
 );
 
 alter table public.tasks add column if not exists team_id text;
@@ -27,10 +28,12 @@ alter table public.tasks add column if not exists assignee_avatar text;
 alter table public.tasks add column if not exists assigned_by_id text;
 alter table public.tasks add column if not exists assigned_by_name text;
 alter table public.tasks add column if not exists assigned_at bigint;
+alter table public.tasks add column if not exists status text default 'todo';
 
 create index if not exists idx_tasks_user_id on public.tasks (user_id);
 create index if not exists idx_tasks_team_id on public.tasks (team_id);
 create index if not exists idx_tasks_assignee_id on public.tasks (assignee_id);
+create index if not exists idx_tasks_status on public.tasks (status);
 create index if not exists idx_tasks_created_at on public.tasks (created_at desc);
 
 create table if not exists public.notes (

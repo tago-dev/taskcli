@@ -1,9 +1,11 @@
 export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
 
 export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  status?: TaskStatus;
   priority: TaskPriority;
   tags: string[];
   estimatedPomodoros: number;
@@ -51,7 +53,8 @@ export interface PomodoroState {
 
 export type ThemeName = 'dark' | 'light' | 'matrix' | 'dracula' | 'cyberpunk' | 'nord';
 
-export type ViewTab = 'all' | 'tasks' | 'notes' | 'pomodoro' | 'terminal' | 'team';
+export type ViewTab = 'all' | 'tasks' | 'kanban' | 'notes' | 'pomodoro' | 'terminal' | 'team';
+export type KanbanGroupBy = 'status' | 'member';
 
 export interface CommandHistoryItem {
   id: string;
