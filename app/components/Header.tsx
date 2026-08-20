@@ -21,7 +21,8 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { ThemeName, ViewTab } from "../types";
+import { AppNotification, ThemeName, ViewTab } from "../types";
+import { NotificationCenter } from "./NotificationCenter";
 
 interface HeaderProps {
   currentTab: ViewTab;
@@ -33,6 +34,12 @@ interface HeaderProps {
   pomodoroSessions: number;
   onOpenHelp: () => void;
   isCloudSyncActive?: boolean;
+  notifications?: AppNotification[];
+  unreadNotificationsCount?: number;
+  onMarkNotificationAsRead?: (id: string) => void;
+  onMarkAllNotificationsAsRead?: () => void;
+  onRemoveNotification?: (id: string) => void;
+  onClearAllNotifications?: () => void;
 }
 
 export function Header({
@@ -45,6 +52,12 @@ export function Header({
   pomodoroSessions,
   onOpenHelp,
   isCloudSyncActive = false,
+  notifications = [],
+  unreadNotificationsCount = 0,
+  onMarkNotificationAsRead = () => {},
+  onMarkAllNotificationsAsRead = () => {},
+  onRemoveNotification = () => {},
+  onClearAllNotifications = () => {},
 }: HeaderProps) {
   const themeColors: Record<ThemeName, string> = {
     dark: "#10b981",
@@ -202,6 +215,16 @@ export function Header({
           >
             <Command className="w-4 h-4" />
           </button>
+
+          <NotificationCenter
+            notifications={notifications}
+            unreadCount={unreadNotificationsCount}
+            onMarkAsRead={onMarkNotificationAsRead}
+            onMarkAllAsRead={onMarkAllNotificationsAsRead}
+            onRemoveNotification={onRemoveNotification}
+            onClearAll={onClearAllNotifications}
+            onNavigateTab={setTab}
+          />
 
           <div className="flex items-center gap-2 pl-1 border-l border-[var(--border-color)]">
             <Show when="signed-out">

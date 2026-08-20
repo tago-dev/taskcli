@@ -47,6 +47,7 @@ interface KanbanBoardProps {
   onToggleTask: (taskId: string) => void;
   onRemoveTask: (taskId: string) => void;
   onSelectForPomodoro?: (taskId: string) => void;
+  getMemberStatus?: (member: TeamMember) => "active" | "focusing" | "offline";
 }
 
 export function KanbanBoard({
@@ -64,6 +65,7 @@ export function KanbanBoard({
   onToggleTask,
   onRemoveTask,
   onSelectForPomodoro,
+  getMemberStatus,
 }: KanbanBoardProps) {
   const [groupBy, setGroupBy] = useState<KanbanGroupBy>("status");
   const [searchQuery, setSearchQuery] = useState("");
@@ -744,6 +746,8 @@ export function KanbanBoard({
               .join("")
               .toUpperCase();
 
+            const mStatus = getMemberStatus ? getMemberStatus(member) : (member.status || "offline");
+
             return (
               <div
                 key={member.id}
@@ -758,15 +762,31 @@ export function KanbanBoard({
               >
                 <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]/30 flex items-center justify-center font-mono font-bold text-xs">
-                      {initials}
+                    <div className="relative">
+                      <div className="w-7 h-7 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]/30 flex items-center justify-center font-mono font-bold text-xs">
+                        {initials}
+                      </div>
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[var(--bg-surface)] ${
+                          mStatus === "focusing"
+                            ? "bg-[var(--warning)] animate-ping"
+                            : mStatus === "active"
+                            ? "bg-[var(--accent)]"
+                            : "bg-[var(--border-color)]"
+                        }`}
+                        title={mStatus === "focusing" ? "Em Pomodoro" : mStatus === "active" ? "Online" : "Offline"}
+                      />
                     </div>
                     <div>
                       <div className="font-mono font-bold text-xs text-[var(--text-main)] truncate max-w-[120px]">
                         {member.name}
                       </div>
-                      <div className="text-[10px] font-mono text-[var(--text-dim)] uppercase">
-                        {member.role}
+                      <div className="text-[10px] font-mono text-[var(--text-dim)] uppercase flex items-center gap-1.5">
+                        <span>{member.role}</span>
+                        <span>•</span>
+                        <span className={mStatus === "focusing" ? "text-[var(--warning)] font-bold" : mStatus === "active" ? "text-[var(--accent)] font-bold" : "text-[var(--text-dim)]"}>
+                          {mStatus === "focusing" ? "Foco" : mStatus === "active" ? "Online" : "Offline"}
+                        </span>
                       </div>
                     </div>
                   </div>

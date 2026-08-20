@@ -64,6 +64,7 @@ interface UseCliProps {
   };
   changeTheme: (theme: ThemeName) => void;
   cycleTheme: () => ThemeName;
+  getMemberStatus?: (member: TeamMember) => "active" | "focusing" | "offline";
 }
 
 export function useCli({
@@ -97,6 +98,7 @@ export function useCli({
   pomodoro,
   changeTheme,
   cycleTheme,
+  getMemberStatus,
 }: UseCliProps) {
   const [history, setHistory] = useState<CommandHistoryItem[]>([
     {
@@ -395,7 +397,9 @@ export function useCli({
               t => t.assigneeId === member.id ||
                    (t.assigneeEmail && t.assigneeEmail.toLowerCase() === member.email.toLowerCase())
             );
-            lines.push(`👤 ${member.name.toUpperCase()} [${member.role.toUpperCase()}] (${memberTasks.length} tarefas):`);
+            const mStatus = getMemberStatus ? getMemberStatus(member) : (member.status || "offline");
+            const statusTag = mStatus === "focusing" ? "[FOCO]" : mStatus === "active" ? "[ONLINE]" : "[OFFLINE]";
+            lines.push(`👤 ${member.name.toUpperCase()} [${member.role.toUpperCase()}] ${statusTag} (${memberTasks.length} tarefas):`);
             if (memberTasks.length === 0) {
               lines.push("   (Sem tarefas atribuídas)");
             } else {
@@ -749,7 +753,9 @@ export function useCli({
               `Membros (${activeTeam.members.length}):`,
             ];
             activeTeam.members.forEach(m => {
-              lines.push(`  - ${m.name} (${m.email}) [${m.role.toUpperCase()}]`);
+              const mStatus = getMemberStatus ? getMemberStatus(m) : (m.status || "offline");
+              const statusTag = mStatus === "focusing" ? "[FOCO]" : mStatus === "active" ? "[ONLINE]" : "[OFFLINE]";
+              lines.push(`  - ${m.name} (${m.email}) [${m.role.toUpperCase()}] ${statusTag}`);
             });
             addHistoryEntry(input, lines, 'info');
           }

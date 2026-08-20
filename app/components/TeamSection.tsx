@@ -65,6 +65,7 @@ interface TeamSectionProps {
   onSearchProfiles?: (query: string) => Promise<UserProfile[]>;
   onSyncClerkUsers?: () => Promise<{ success: boolean; count: number; users?: UserProfile[] }>;
   onJoinTeamByCode?: (code: string) => Promise<{ success: boolean; message: string }>;
+  getMemberStatus?: (member: TeamMember) => "active" | "focusing" | "offline";
 }
 
 export function TeamSection({
@@ -88,6 +89,7 @@ export function TeamSection({
   onSearchProfiles,
   onSyncClerkUsers,
   onJoinTeamByCode,
+  getMemberStatus,
 }: TeamSectionProps) {
   const [teamTab, setTeamTab] = useState<"members" | "board">("members");
 
@@ -309,24 +311,24 @@ export function TeamSection({
     switch (status) {
       case "focusing":
         return (
-          <span className="flex items-center gap-1 text-[11px] font-mono text-[var(--warning)]">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--warning-soft)] border border-[var(--warning)]/30 text-[11px] font-mono text-[var(--warning)] font-semibold">
             <span className="w-2 h-2 rounded-full bg-[var(--warning)] animate-ping" />
             Em Pomodoro
           </span>
         );
-      case "offline":
-        return (
-          <span className="flex items-center gap-1 text-[11px] font-mono text-[var(--text-dim)]">
-            <span className="w-2 h-2 rounded-full bg-[var(--border-color)]" />
-            Ausente
-          </span>
-        );
       case "active":
-      default:
         return (
-          <span className="flex items-center gap-1 text-[11px] font-mono text-[var(--accent)]">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--accent-soft)] border border-[var(--accent)]/30 text-[11px] font-mono text-[var(--accent)] font-semibold">
             <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
             Online
+          </span>
+        );
+      case "offline":
+      default:
+        return (
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-dim)]">
+            <span className="w-2 h-2 rounded-full bg-[var(--border-color)]" />
+            Offline
           </span>
         );
     }
@@ -981,15 +983,21 @@ export function TeamSection({
             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-mono uppercase text-[var(--text-dim)] font-semibold">
-                  Status de Foco
+                  Status de Presença
                 </span>
                 <UserCheck className="w-4 h-4 text-[var(--warning)]" />
               </div>
               <div className="text-2xl font-bold font-mono text-[var(--text-main)]">
-                {activeTeam.members.filter(m => m.status === "focusing").length} em foco
+                {activeTeam.members.filter(m => (getMemberStatus ? getMemberStatus(m) : m.status) === "focusing").length} em foco
               </div>
-              <div className="text-xs text-[var(--text-dim)] font-mono mt-1">
-                {activeTeam.members.filter(m => m.status === "active").length} disponíveis agora
+              <div className="text-xs text-[var(--text-dim)] font-mono mt-1 flex items-center gap-2">
+                <span className="text-[var(--accent)] font-semibold">
+                  ● {activeTeam.members.filter(m => (getMemberStatus ? getMemberStatus(m) : m.status) === "active").length} online
+                </span>
+                <span>•</span>
+                <span>
+                  ● {activeTeam.members.filter(m => (getMemberStatus ? getMemberStatus(m) : m.status) === "offline").length} offline
+                </span>
               </div>
             </div>
           </div>
@@ -1026,6 +1034,7 @@ export function TeamSection({
 
                 const mTasks = getMemberTasks(member);
                 const pendingTasks = mTasks.filter(t => !t.completed).length;
+                const memberStatus = getMemberStatus ? getMemberStatus(member) : (member.status || "offline");
 
                 return (
                   <div
@@ -1058,7 +1067,7 @@ export function TeamSection({
                     </div>
 
                     <div className="flex items-center gap-3">
-                      {getStatusBadge(member.status)}
+                      {getStatusBadge(memberStatus)}
 
                       {isLeaderOrAdmin && (
                         <button
