@@ -68,12 +68,14 @@ export type TeamRole = 'owner' | 'admin' | 'member';
 
 export interface TeamMember {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   role: TeamRole;
   avatarUrl?: string;
   joinedAt: number;
   status?: 'active' | 'focusing' | 'offline';
+  lastSeenAt?: number;
 }
 
 export interface Team {
@@ -94,5 +96,17 @@ export interface UserProfile {
   avatarUrl?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export type NotificationType = 'info' | 'success' | 'warning' | 'team' | 'task' | 'pomodoro';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  timestamp: number;
+  read: boolean;
+  linkTab?: ViewTab;
 }
 

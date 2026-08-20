@@ -10,9 +10,13 @@ import { PomodoroTimer } from "./components/PomodoroTimer";
 import { TaskList } from "./components/TaskList";
 import { TeamSection } from "./components/TeamSection";
 import { TerminalPrompt } from "./components/TerminalPrompt";
+import { ToastContainer } from "./components/ToastContainer";
 import { useCli } from "./hooks/useCli";
 import { useNotes } from "./hooks/useNotes";
+import { useNotifications } from "./hooks/useNotifications";
 import { usePomodoro } from "./hooks/usePomodoro";
+import { usePresence } from "./hooks/usePresence";
+import { useRealtimeSync } from "./hooks/useRealtimeSync";
 import { useTasks } from "./hooks/useTasks";
 import { useTeams } from "./hooks/useTeams";
 import { useTheme } from "./hooks/useTheme";
@@ -127,6 +131,51 @@ export default function Home() {
   });
 
   const {
+    notifications,
+    toasts,
+    unreadCount,
+    addNotification,
+    dismissToast,
+    markAsRead,
+    markAllAsRead,
+    removeNotification,
+    clearAllNotifications,
+  } = useNotifications();
+
+  useRealtimeSync({
+    userId,
+    userEmail,
+    userName,
+    activeTeamId: activeTeam?.id || null,
+    teamIds: teams.map(t => t.id),
+    onReloadTasks: () => {
+      if (userId) {
+        loadTasksFromSupabase(userId, teams.map(t => t.id), userEmail);
+      }
+    },
+    onReloadTeams: () => {
+      if (userId) {
+        loadTeamsFromSupabase(userId, userEmail);
+      }
+    },
+    onReloadNotes: () => {
+      if (userId) {
+        loadNotesFromSupabase(userId);
+      }
+    },
+    onNotify: addNotification,
+  });
+
+  const { getMemberStatus } = usePresence({
+    activeTeamId: activeTeam?.id || null,
+    userId,
+    userName,
+    userEmail,
+    userAvatar,
+    isPomodoroRunning: pomodoro.isRunning,
+  });
+
+  const {
     history,
     commandHistoryList,
     executeCommand,
@@ -172,6 +221,7 @@ export default function Home() {
     },
     changeTheme,
     cycleTheme,
+    getMemberStatus,
   });
 
   const activeTask = tasks.find(t => t.id === pomodoro.activeTaskId) || null;
@@ -201,6 +251,12 @@ export default function Home() {
         pomodoroSessions={pomodoro.sessionsCompleted}
         onOpenHelp={() => setIsCommandPaletteOpen(true)}
         isCloudSyncActive={Boolean(userId && isSupabaseConfigured)}
+        notifications={notifications}
+        unreadNotificationsCount={unreadCount}
+        onMarkNotificationAsRead={markAsRead}
+        onMarkAllNotificationsAsRead={markAllAsRead}
+        onRemoveNotification={removeNotification}
+        onClearAllNotifications={clearAllNotifications}
       />
 
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 space-y-8">
@@ -373,6 +429,7 @@ export default function Home() {
               onSelectForPomodoro={id =>
                 pomodoro.setActiveTaskId(pomodoro.activeTaskId === id ? null : id)
               }
+              getMemberStatus={getMemberStatus}
             />
           </div>
         )}
@@ -470,6 +527,7 @@ export default function Home() {
               onSearchProfiles={searchProfiles}
               onSyncClerkUsers={syncClerkUsers}
               onJoinTeamByCode={joinTeamByCode}
+              getMemberStatus={getMemberStatus}
             />
           </div>
         )}
@@ -503,6 +561,12 @@ export default function Home() {
         currentTheme={theme}
         onSelectTheme={changeTheme}
         onRunCommand={executeCommand}
+      />
+
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={dismissToast}
+        onNavigate={setCurrentTab}
       />
     </div>
   );

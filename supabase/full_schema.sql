@@ -42,7 +42,7 @@ create table if not exists public.tasks (
   user_id text not null,
   title text not null,
   completed boolean default false not null,
-  status text default 'todo' check (status in ('todo', 'in_progress', 'done')),
+  status text default 'todo',
   priority text default 'medium' not null check (priority in ('low', 'medium', 'high')),
   tags text[] default '{}'::text[] not null,
   estimated_pomodoros integer default 1 not null,
@@ -58,6 +58,25 @@ create table if not exists public.tasks (
   assigned_by_name text,
   assigned_at bigint
 );
+
+alter table public.tasks add column if not exists team_id text;
+alter table public.tasks add column if not exists assignee_id text;
+alter table public.tasks add column if not exists assignee_name text;
+alter table public.tasks add column if not exists assignee_email text;
+alter table public.tasks add column if not exists assignee_avatar text;
+alter table public.tasks add column if not exists assigned_by_id text;
+alter table public.tasks add column if not exists assigned_by_name text;
+alter table public.tasks add column if not exists assigned_at bigint;
+alter table public.tasks add column if not exists status text default 'todo';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'tasks_status_check'
+  ) then
+    alter table public.tasks add constraint tasks_status_check check (status in ('todo', 'in_progress', 'done'));
+  end if;
+end $$;
 
 create index if not exists idx_tasks_user_id on public.tasks (user_id);
 create index if not exists idx_tasks_team_id on public.tasks (team_id);
@@ -113,3 +132,31 @@ grant select, insert, update, delete on public.teams to anon, authenticated;
 grant select, insert, update, delete on public.team_members to anon, authenticated;
 grant select, insert, update, delete on public.tasks to anon, authenticated;
 grant select, insert, update, delete on public.notes to anon, authenticated;
+
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.tasks;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.teams;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.team_members;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.notes;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.profiles;
+  exception when others then null;
+  end;
+end $$;
