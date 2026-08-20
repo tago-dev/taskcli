@@ -6,6 +6,7 @@ interface SupabaseTaskRow {
   user_id: string;
   title: string;
   completed: boolean;
+  status?: string | null;
   priority: TaskPriority;
   tags: string[];
   estimated_pomodoros: number;
@@ -149,6 +150,7 @@ export async function fetchTasksFromSupabase(
       id: row.id,
       title: row.title,
       completed: row.completed,
+      status: (row.status as Task["status"]) || (row.completed ? "done" : "todo"),
       priority: row.priority,
       tags: row.tags || [],
       estimatedPomodoros: row.estimated_pomodoros,
@@ -178,6 +180,7 @@ export async function createTaskInSupabase(task: Task, userId: string): Promise<
       user_id: userId,
       title: task.title,
       completed: task.completed,
+      status: task.status || (task.completed ? "done" : "todo"),
       priority: task.priority,
       tags: task.tags,
       estimated_pomodoros: task.estimatedPomodoros,
@@ -211,6 +214,7 @@ export async function updateTaskInSupabase(
     const payload: Partial<SupabaseTaskRow> = {};
     if (updates.title !== undefined) payload.title = updates.title;
     if (updates.completed !== undefined) payload.completed = updates.completed;
+    if (updates.status !== undefined) payload.status = updates.status;
     if (updates.priority !== undefined) payload.priority = updates.priority;
     if (updates.tags !== undefined) payload.tags = updates.tags;
     if (updates.estimatedPomodoros !== undefined) payload.estimated_pomodoros = updates.estimatedPomodoros;
@@ -624,6 +628,7 @@ export async function bulkSyncToSupabase(
         user_id: userId,
         title: t.title,
         completed: t.completed,
+        status: t.status || (t.completed ? "done" : "todo"),
         priority: t.priority,
         tags: t.tags,
         estimated_pomodoros: t.estimatedPomodoros,

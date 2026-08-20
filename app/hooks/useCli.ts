@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { generateId, playAudioFeedback } from "../lib/utils";
-import { CommandHistoryItem, Note, PomodoroMode, Task, TaskPriority, Team, TeamMember, TeamRole, ThemeName, UserProfile } from "../types";
+import { CommandHistoryItem, Note, PomodoroMode, Task, TaskPriority, TaskStatus, Team, TeamMember, TeamRole, ThemeName, UserProfile } from "../types";
 
 interface UseCliProps {
   tasks: Task[];
@@ -28,6 +28,7 @@ interface UseCliProps {
     tags?: string[],
     estimatedPomodoros?: number,
     assignmentOptions?: {
+      status?: TaskStatus;
       teamId?: string;
       assigneeId?: string;
       assigneeName?: string;
@@ -43,6 +44,7 @@ interface UseCliProps {
     assignedBy?: { id: string; name: string }
   ) => Task | null;
   toggleTask: (id: string) => Task | null;
+  updateTaskStatus?: (id: string, status: TaskStatus) => Task | null;
   removeTask: (id: string) => boolean;
   clearCompleted: () => number;
   clearAllTasks: () => void;
@@ -85,6 +87,7 @@ export function useCli({
   addTask,
   assignTask,
   toggleTask,
+  updateTaskStatus,
   removeTask,
   clearCompleted,
   clearAllTasks,
@@ -119,9 +122,7 @@ export function useCli({
       timestamp: Date.now(),
     };
     setHistory(prev => [...prev, newItem]);
-    if (command.trim()) {
-      setCommandHistoryList(prev => [command, ...prev.filter(c => c !== command)].slice(0, 50));
-    }
+    setCommandHistoryList(prev => [...prev, command]);
     setHistoryIndex(-1);
   };
 
@@ -129,32 +130,22 @@ export function useCli({
     setHistory([]);
   };
 
-  const resolveTaskId = (arg: string): string | null => {
-    const trimmed = arg.trim().toLowerCase();
-    const exact = tasks.find(t => t.id.toLowerCase() === trimmed);
-    if (exact) return exact.id;
-
-    const num = parseInt(trimmed, 10);
-    if (!isNaN(num) && num >= 1 && num <= tasks.length) {
+  const resolveTaskId = (identifier: string): string | null => {
+    const num = parseInt(identifier, 10);
+    if (!isNaN(num) && num > 0 && num <= tasks.length) {
       return tasks[num - 1].id;
     }
-
-    const partial = tasks.find(t => t.title.toLowerCase().includes(trimmed));
-    return partial ? partial.id : null;
+    const match = tasks.find(t => t.id.toLowerCase() === identifier.toLowerCase());
+    return match ? match.id : null;
   };
 
-  const resolveNoteId = (arg: string): string | null => {
-    const trimmed = arg.trim().toLowerCase();
-    const exact = notes.find(n => n.id.toLowerCase() === trimmed);
-    if (exact) return exact.id;
-
-    const num = parseInt(trimmed, 10);
-    if (!isNaN(num) && num >= 1 && num <= notes.length) {
+  const resolveNoteId = (identifier: string): string | null => {
+    const num = parseInt(identifier, 10);
+    if (!isNaN(num) && num > 0 && num <= notes.length) {
       return notes[num - 1].id;
     }
-
-    const partial = notes.find(n => n.title.toLowerCase().includes(trimmed));
-    return partial ? partial.id : null;
+    const match = notes.find(n => n.id.toLowerCase() === identifier.toLowerCase());
+    return match ? match.id : null;
   };
 
   const findTeamMember = (query: string): TeamMember | null => {
@@ -167,14 +158,14 @@ export function useCli({
     ) || null;
   };
 
-  const executeCommand = async (rawInput: string) => {
-    const input = rawInput.trim();
+  const executeCommand = async (inputStr: string) => {
+    const input = inputStr.trim();
     if (!input) return;
 
     const parts = input.split(/\s+/);
     const cmd = parts[0].toLowerCase();
     const args = parts.slice(1);
-    const rest = args.join(' ');
+    const rest = parts.slice(1).join(' ');
 
     playAudioFeedback('beep');
 
@@ -184,6 +175,8 @@ export function useCli({
         addHistoryEntry(input, [
           "COMANDOS DISPONÍVEIS:",
           "  add <texto> [@membro] [-p high|med|low] [#tag] [~2] - Adiciona/atribui tarefa",
+          "  kanban [status|team]                       - Exibe quadro Kanban no terminal",
+          "  status <id|núm> <todo|in_progress|done>    - Altera o status da tarefa no Kanban",
           "  assign <id|núm> <membro>                  - Atribui tarefa da equipe a um membro",
           "  unassign <id|núm>                          - Remove a atribuição de uma tarefa",
           "  done <id|núm>                              - Marca/desmarca tarefa como concluída",
@@ -352,6 +345,128 @@ export function useCli({
           if (updated) {
             addHistoryEntry(input, [`✓ Atribuição removida da tarefa [${updated.id}] "${updated.title}".`], 'success');
           }
+        }
+        break;
+      }
+
+      case 'status': {
+        const taskIdArg = args[0];
+        const statusArg = args[1]?.toLowerCase();
+        if (!taskIdArg || !statusArg || !['todo', 'in_progress', 'done'].includes(statusArg)) {
+          addHistoryEntry(input, [
+            "Uso: status <id|número> <todo | in_progress | done>",
+            "Ex: status 1 in_progress",
+            "Ex: status abc1234 done"
+          ], 'error');
+          return;
+        }
+
+        const taskId = resolveTaskId(taskIdArg);
+        if (!taskId) {
+          addHistoryEntry(input, [`Erro: Tarefa não encontrada para '${taskIdArg}'`], 'error');
+          return;
+        }
+
+        if (updateTaskStatus) {
+          const updated = updateTaskStatus(taskId, statusArg as TaskStatus);
+          if (updated) {
+            const statusLabel = statusArg === 'todo' ? 'A FAZER' : statusArg === 'in_progress' ? 'EM PROGRESSO' : 'CONCLUÍDO';
+            addHistoryEntry(input, [`✓ Status da tarefa [${updated.id}] alterado para [${statusLabel}]: "${updated.title}"`], 'success');
+          }
+        }
+        break;
+      }
+
+      case 'kanban': {
+        const sub = args[0]?.toLowerCase();
+        if (sub === 'team' || sub === 'members') {
+          if (!activeTeam) {
+            addHistoryEntry(input, ["Nenhuma equipe ativa selecionada para visualização por membros."], 'warn');
+            return;
+          }
+
+          const lines = [
+            `QUADRO KANBAN POR MEMBRO — EQUIPE: "${activeTeam.name}"`,
+            "================================================================================",
+          ];
+
+          activeTeam.members.forEach(member => {
+            const memberTasks = tasks.filter(
+              t => t.assigneeId === member.id ||
+                   (t.assigneeEmail && t.assigneeEmail.toLowerCase() === member.email.toLowerCase())
+            );
+            lines.push(`👤 ${member.name.toUpperCase()} [${member.role.toUpperCase()}] (${memberTasks.length} tarefas):`);
+            if (memberTasks.length === 0) {
+              lines.push("   (Sem tarefas atribuídas)");
+            } else {
+              memberTasks.forEach(t => {
+                const st = t.status === 'done' || t.completed ? '[DONE]' : t.status === 'in_progress' ? '[PROG]' : '[TODO]';
+                const prio = `[${t.priority[0].toUpperCase()}]`;
+                const pom = `🍅 ${t.completedPomodoros}/${t.estimatedPomodoros}`;
+                lines.push(`   • ${st} ${prio} [${t.id}] ${t.title} (${pom})`);
+              });
+            }
+            lines.push("");
+          });
+
+          const unassigned = tasks.filter(t => (t.teamId === activeTeam.id || Boolean(t.assigneeName)) && !t.assigneeName && !t.assigneeId);
+          if (unassigned.length > 0) {
+            lines.push(`📋 NÃO ATRIBUÍDAS (${unassigned.length} tarefas):`);
+            unassigned.forEach(t => {
+              const st = t.status === 'done' || t.completed ? '[DONE]' : t.status === 'in_progress' ? '[PROG]' : '[TODO]';
+              lines.push(`   • ${st} [${t.id}] ${t.title}`);
+            });
+            lines.push("");
+          }
+
+          lines.push("================================================================================");
+          addHistoryEntry(input, lines, 'info');
+        } else {
+          const todoTasks = tasks.filter(t => t.status === 'todo' || (!t.status && !t.completed && t.completedPomodoros === 0));
+          const inProgressTasks = tasks.filter(t => t.status === 'in_progress' || (!t.status && !t.completed && t.completedPomodoros > 0));
+          const doneTasks = tasks.filter(t => t.status === 'done' || t.completed);
+
+          const lines = [
+            `QUADRO KANBAN (STATUS) — TOTAL: ${tasks.length} TAREFAS`,
+            "================================================================================",
+            `📌 [ A FAZER ] (${todoTasks.length}):`,
+          ];
+          if (todoTasks.length === 0) {
+            lines.push("   (Nenhuma tarefa a fazer)");
+          } else {
+            todoTasks.forEach(t => {
+              const prio = `[${t.priority[0].toUpperCase()}]`;
+              const who = t.assigneeName ? `@${t.assigneeName}` : '';
+              lines.push(`   • ${prio} [${t.id}] ${t.title} ${who} (🍅 ${t.completedPomodoros}/${t.estimatedPomodoros})`);
+            });
+          }
+          lines.push("");
+
+          lines.push(`⚡ [ EM PROGRESSO / EM FOCO ] (${inProgressTasks.length}):`);
+          if (inProgressTasks.length === 0) {
+            lines.push("   (Nenhuma tarefa em andamento)");
+          } else {
+            inProgressTasks.forEach(t => {
+              const prio = `[${t.priority[0].toUpperCase()}]`;
+              const who = t.assigneeName ? `@${t.assigneeName}` : '';
+              lines.push(`   • ${prio} [${t.id}] ${t.title} ${who} (🍅 ${t.completedPomodoros}/${t.estimatedPomodoros})`);
+            });
+          }
+          lines.push("");
+
+          lines.push(`✅ [ CONCLUÍDO ] (${doneTasks.length}):`);
+          if (doneTasks.length === 0) {
+            lines.push("   (Nenhuma tarefa concluída)");
+          } else {
+            doneTasks.forEach(t => {
+              const prio = `[${t.priority[0].toUpperCase()}]`;
+              const who = t.assigneeName ? `@${t.assigneeName}` : '';
+              lines.push(`   • ${prio} [${t.id}] ${t.title} ${who} (🍅 ${t.completedPomodoros}/${t.estimatedPomodoros})`);
+            });
+          }
+          lines.push("================================================================================");
+          lines.push("Dica: Use `status <id> in_progress` ou `status <id> done` para mover cards.");
+          addHistoryEntry(input, lines, 'info');
         }
         break;
       }
