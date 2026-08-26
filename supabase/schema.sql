@@ -56,16 +56,18 @@ alter table public.notes enable row level security;
 create policy "Allow all access to public.tasks with matching user_id"
 on public.tasks
 for all
-to anon, authenticated
+to authenticated
 using (true)
 with check (true);
 
 create policy "Allow all access to public.notes with matching user_id"
 on public.notes
 for all
-to anon, authenticated
+to authenticated
 using (true)
 with check (true);
 
-grant select, insert, update, delete on public.tasks to anon, authenticated;
-grant select, insert, update, delete on public.notes to anon, authenticated;
+revoke all on public.tasks from anon;
+revoke all on public.notes from anon;
+grant select, insert, update, delete on public.tasks to authenticated;
+grant select, insert, update, delete on public.notes to authenticated;

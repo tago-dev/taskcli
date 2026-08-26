@@ -107,31 +107,36 @@ alter table public.notes enable row level security;
 do $$
 begin
   if not exists (select 1 from pg_policies where policyname = 'Allow all access to public.profiles') then
-    create policy "Allow all access to public.profiles" on public.profiles for all to anon, authenticated using (true) with check (true);
+    create policy "Allow all access to public.profiles" on public.profiles for all to authenticated using (true) with check (true);
   end if;
 
   if not exists (select 1 from pg_policies where policyname = 'Allow all access to public.teams') then
-    create policy "Allow all access to public.teams" on public.teams for all to anon, authenticated using (true) with check (true);
+    create policy "Allow all access to public.teams" on public.teams for all to authenticated using (true) with check (true);
   end if;
 
   if not exists (select 1 from pg_policies where policyname = 'Allow all access to public.team_members') then
-    create policy "Allow all access to public.team_members" on public.team_members for all to anon, authenticated using (true) with check (true);
+    create policy "Allow all access to public.team_members" on public.team_members for all to authenticated using (true) with check (true);
   end if;
 
   if not exists (select 1 from pg_policies where policyname = 'Allow all access to public.tasks') then
-    create policy "Allow all access to public.tasks" on public.tasks for all to anon, authenticated using (true) with check (true);
+    create policy "Allow all access to public.tasks" on public.tasks for all to authenticated using (true) with check (true);
   end if;
 
   if not exists (select 1 from pg_policies where policyname = 'Allow all access to public.notes') then
-    create policy "Allow all access to public.notes" on public.notes for all to anon, authenticated using (true) with check (true);
+    create policy "Allow all access to public.notes" on public.notes for all to authenticated using (true) with check (true);
   end if;
 end $$;
 
-grant select, insert, update, delete on public.profiles to anon, authenticated;
-grant select, insert, update, delete on public.teams to anon, authenticated;
-grant select, insert, update, delete on public.team_members to anon, authenticated;
-grant select, insert, update, delete on public.tasks to anon, authenticated;
-grant select, insert, update, delete on public.notes to anon, authenticated;
+revoke all on public.profiles from anon;
+revoke all on public.teams from anon;
+revoke all on public.team_members from anon;
+revoke all on public.tasks from anon;
+revoke all on public.notes from anon;
+grant select, insert, update, delete on public.profiles to authenticated;
+grant select, insert, update, delete on public.teams to authenticated;
+grant select, insert, update, delete on public.team_members to authenticated;
+grant select, insert, update, delete on public.tasks to authenticated;
+grant select, insert, update, delete on public.notes to authenticated;
 
 do $$
 begin

@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { CommandPalette } from "./components/CommandPalette";
 import { Header } from "./components/Header";
@@ -20,7 +20,7 @@ import { useRealtimeSync } from "./hooks/useRealtimeSync";
 import { useTasks } from "./hooks/useTasks";
 import { useTeams } from "./hooks/useTeams";
 import { useTheme } from "./hooks/useTheme";
-import { isSupabaseConfigured } from "./lib/supabaseClient";
+import { isSupabaseConfigured, setSupabaseAccessTokenProvider } from "./lib/supabaseClient";
 import { bulkSyncToSupabase, syncUserProfileToSupabase } from "./lib/supabaseDb";
 import { ViewTab } from "./types";
 
@@ -29,11 +29,16 @@ export default function Home() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
 
+  const { getToken } = useAuth();
   const { user, isLoaded: userLoaded } = useUser();
   const userId = user?.id || null;
   const userName = user?.fullName || user?.firstName || null;
   const userEmail = user?.primaryEmailAddress?.emailAddress || null;
   const userAvatar = user?.imageUrl || undefined;
+
+  useEffect(() => {
+    return setSupabaseAccessTokenProvider(() => getToken());
+  }, [getToken]);
 
   const { theme, changeTheme, cycleTheme, mounted: themeMounted } = useTheme();
 

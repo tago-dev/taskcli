@@ -31,16 +31,18 @@ alter table public.team_members enable row level security;
 create policy "Allow all access to public.teams"
 on public.teams
 for all
-to anon, authenticated
+to authenticated
 using (true)
 with check (true);
 
 create policy "Allow all access to public.team_members"
 on public.team_members
 for all
-to anon, authenticated
+to authenticated
 using (true)
 with check (true);
 
-grant select, insert, update, delete on public.teams to anon, authenticated;
-grant select, insert, update, delete on public.team_members to anon, authenticated;
+revoke all on public.teams from anon;
+revoke all on public.team_members from anon;
+grant select, insert, update, delete on public.teams to authenticated;
+grant select, insert, update, delete on public.team_members to authenticated;
