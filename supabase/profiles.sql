@@ -15,8 +15,9 @@ alter table public.profiles enable row level security;
 create policy "Allow all access to public.profiles"
 on public.profiles
 for all
-to anon, authenticated
+to authenticated
 using (true)
 with check (true);
 
-grant select, insert, update, delete on public.profiles to anon, authenticated;
+revoke all on public.profiles from anon;
+grant select, insert, update, delete on public.profiles to authenticated;

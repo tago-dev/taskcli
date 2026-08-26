@@ -1,6 +1,6 @@
-import { clerkClient } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { isSupabaseConfigured, supabase } from "@/app/lib/supabaseClient";
+import { createSupabaseClient } from "@/app/lib/supabaseClient";
 
 export async function GET() {
   return handleSync();
@@ -12,6 +12,13 @@ export async function POST() {
 
 async function handleSync() {
   try {
+    const { getToken, userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: "Não autorizado" }, { status: 401 });
+    }
+
+    const supabase = createSupabaseClient(() => getToken());
     const client = await clerkClient();
     const clerkUsersResponse = await client.users.getUserList({
       limit: 100,
@@ -41,7 +48,7 @@ async function handleSync() {
       };
     });
 
-    if (isSupabaseConfigured && supabase && profiles.length > 0) {
+    if (supabase && profiles.length > 0) {
       await supabase.from("profiles").upsert(profiles, { onConflict: "id" });
 
       for (const profile of profiles) {
